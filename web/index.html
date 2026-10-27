@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tread</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { text-align: left; padding: .25rem 0; }
+  </style>
+</head>
+<body>
+  <h1>tread</h1>
+  <p><a href="control.html">Control</a></p>
+  <!-- TODO: totals + daily bar chart -->
+  <table>
+    <thead><tr><th>Day</th><th>Walking</th><th>Distance</th></tr></thead>
+    <tbody id="days"></tbody>
+  </table>
+  <script>
+    fetch("/api/stats?days=7").then(r => r.json()).then(({ days }) => {
+      document.getElementById("days").innerHTML = (days || []).map(d =>
+        `<tr><td>${d.date}</td><td>${Math.round(d.walking_ns / 6e10)} min</td><td>${d.distance_km.toFixed(2)} km</td></tr>`
+      ).join("");
+    });
+  </script>
+</body>
+</html>

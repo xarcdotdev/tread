@@ -1,0 +1,14 @@
+# Copy to ~/.config/tread/config.toml
+
+# Treadmill address (find it with bluetoothctl: scan on, devices)
+mac = "AA:BB:CC:DD:EE:FF"
+
+# Where controllers report events. Leave empty to only queue locally.
+server_url = "http://homeserver:8080"
+
+# Name of this controller in events (defaults to the hostname)
+# device = "desktop"
+
+# Only used by `tread serve`
+listen = ":8080"
+# db_path = "/var/lib/tread/tread.db"  # default: ~/.config/tread/tread.db
