@@ -26,6 +26,8 @@ func NewClient(serverURL, queuePath string) *Client {
 }
 
 // Report sends queued events plus e. On failure everything stays queued.
+// Report and Flush require exclusive queue access for their entire duration.
+// Concurrent callers should use Snapshot/Post/Acknowledge with external locking.
 func (c *Client) Report(e Event) error {
 	events, err := c.readQueue()
 	if err != nil {
@@ -38,20 +40,55 @@ func (c *Client) Report(e Event) error {
 	return c.Flush()
 }
 func (c *Client) Flush() error {
-	events, err := c.readQueue()
+	events, err := c.Snapshot()
 	if err != nil {
 		return err
 	}
+	if err := c.Post(events); err != nil {
+		return err
+	}
+	return c.Acknowledge(events)
+}
+
+// Snapshot reads an independent batch under the caller's queue lock.
+func (c *Client) Snapshot() ([]Event, error) { return c.readQueue() }
+
+// Post sends only the immutable snapshot; it never accesses the queue or needs
+// its lock. A failed/ambiguous delivery can be retried using the same event IDs.
+func (c *Client) Post(events []Event) error {
 	if len(events) == 0 {
 		return nil
 	}
 	if c.ServerURL == "" {
 		return fmt.Errorf("%d event(s) queued; server_url is empty", len(events))
 	}
-	if err = c.post(events); err != nil {
+	if err := c.post(events); err != nil {
 		return fmt.Errorf("%d event(s) queued: %w", len(events), err)
 	}
-	return c.writeQueue(nil)
+	return nil
+}
+
+// Acknowledge durably removes only delivered IDs, preserving concurrent additions.
+// The caller must reacquire the queue lock after Post succeeds.
+func (c *Client) Acknowledge(delivered []Event) error {
+	if len(delivered) == 0 {
+		return nil
+	}
+	events, err := c.readQueue()
+	if err != nil {
+		return err
+	}
+	ids := make(map[string]bool, len(delivered))
+	for _, e := range delivered {
+		ids[e.ID] = true
+	}
+	remaining := events[:0]
+	for _, e := range events {
+		if !ids[e.ID] {
+			remaining = append(remaining, e)
+		}
+	}
+	return c.writeQueue(remaining)
 }
 
 func (c *Client) post(events []Event) error {
@@ -87,6 +124,9 @@ func (c *Client) readQueue() ([]Event, error) {
 		if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
 			return nil, fmt.Errorf("queue %s: %w", c.QueuePath, err)
 		}
+		if err := e.Validate(time.Now()); err != nil {
+			return nil, fmt.Errorf("queue %s: %w", c.QueuePath, err)
+		}
 		events = append(events, e)
 	}
 	return events, sc.Err()
@@ -98,7 +138,10 @@ func (c *Client) writeQueue(events []Event) error {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		return syncDir(filepath.Dir(c.QueuePath))
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -126,5 +169,53 @@ func (c *Client) writeQueue(events []Event) error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(f.Name(), c.QueuePath)
+	if err := os.Rename(f.Name(), c.QueuePath); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(c.QueuePath))
+}
+
+// Preflight validates and durably rewrites the queue before a physical action.
+// Callers must hold the per-configuration queue lock.
+func (c *Client) Preflight() error {
+	events, err := c.readQueue()
+	if err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	return c.writeQueue(events)
+}
+
+// Enqueue durably records confirmed events without network access. Replaying
+// journal IDs is safe, including after an ambiguous queue commit.
+func (c *Client) Enqueue(pending ...Event) error {
+	events, err := c.readQueue()
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]bool)
+	for _, e := range events {
+		seen[e.ID] = true
+	}
+	for _, e := range pending {
+		if err := e.Validate(time.Now()); err != nil {
+			return err
+		}
+		if !seen[e.ID] {
+			events = append(events, e)
+			seen[e.ID] = true
+		}
+	}
+	return c.writeQueue(events)
+}
+
+func syncDir(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
 }

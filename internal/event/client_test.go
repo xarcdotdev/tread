@@ -4,9 +4,69 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestSnapshotAcknowledgementPreservesNewEvents(t *testing.T) {
+	c := NewClient("", filepath.Join(t.TempDir(), "queue.jsonl"))
+	a, b := New("desk", Start, 0), New("desk", Pause, 0)
+	if err := c.Enqueue(a); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Enqueue(b); err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot) != 1 || snapshot[0].ID != a.ID {
+		t.Fatal(snapshot)
+	}
+	for i := 0; i < 2; i++ {
+		if err := c.Acknowledge(snapshot); err != nil {
+			t.Fatal(err)
+		}
+		remaining, err := c.Snapshot()
+		if err != nil || len(remaining) != 1 || remaining[0].ID != b.ID {
+			t.Fatalf("%v %v", remaining, err)
+		}
+	}
+}
+
+func TestQueueOnlyRecovery(t *testing.T) {
+	c := NewClient("", filepath.Join(t.TempDir(), "queue.jsonl"))
+	e := New("old-device", Pause, 0)
+	if err := c.Enqueue(e, e); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Enqueue(e); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Preflight(); err != nil {
+		t.Fatal(err)
+	}
+	es, err := c.readQueue()
+	if err != nil || len(es) != 1 || es[0].ID != e.ID {
+		t.Fatalf("replay: %v %v", es, err)
+	}
+	bad := []byte("{broken\n")
+	if err := os.WriteFile(c.QueuePath, bad, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Preflight(); err == nil {
+		t.Fatal("corrupt queue accepted")
+	}
+	if err := c.Enqueue(e); err == nil {
+		t.Fatal("corrupt queue overwritten")
+	}
+	got, err := os.ReadFile(c.QueuePath)
+	if err != nil || string(got) != string(bad) {
+		t.Fatalf("corrupt data lost: %q %v", got, err)
+	}
+}
 
 func TestOfflineDeliveryThenRetry(t *testing.T) {
 	online := false

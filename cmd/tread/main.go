@@ -17,8 +17,8 @@ import (
 
 	"github.com/xarcdotdev/oss-treadmill/internal/ble"
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
+	controls "github.com/xarcdotdev/oss-treadmill/internal/control"
 	"github.com/xarcdotdev/oss-treadmill/internal/demo"
-	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
 	"github.com/xarcdotdev/oss-treadmill/internal/server"
 	"github.com/xarcdotdev/oss-treadmill/internal/stats"
@@ -28,7 +28,10 @@ import (
 const usage = `usage: tread [-config path] <command> [options]
 
   start | resume | pause | stop    Control the treadmill and report usage
-  speed <1-8>                     Set a speed level and report it
+  speed <1-8>                     Set a speed level and queue usage
+  toggle                          Toggle known running/paused/stopped state
+  speed-up | speed-down           Adjust known running speed by one level
+  reset-state                     Forget local knowledge; preserve usage
   status                          Send the device status query (no telemetry decoding)
   sync                            Retry queued usage events
   stats [-period 1w] [-json]       Usage from server (also supports -days N)
@@ -90,8 +93,8 @@ func run(args []string) error {
 		if len(args) > 0 {
 			return errors.New("usage: tread sync")
 		}
-		return withLock(cfg, func() error { return event.NewClient(cfg.ServerURL, cfg.QueuePath()).Flush() })
-	case "start", "resume", "pause", "stop", "status", "speed":
+		return syncUsage(newController(cfg))
+	case "start", "resume", "pause", "stop", "status", "speed", "toggle", "speed-up", "speed-down", "reset-state":
 		level := 0
 		if cmd == "speed" {
 			if len(args) != 1 {
@@ -127,36 +130,62 @@ func withLock(cfg config.Config, fn func() error) error {
 	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 	return fn()
 }
+func newController(cfg config.Config) *controls.Controller {
+	return &controls.Controller{Config: cfg, Queue: event.NewClient(cfg.ServerURL, cfg.QueuePath()), Send: ble.Send}
+}
 func control(cfg config.Config, action string, level int) error {
-	driver, err := device.Lookup(cfg.Treadmill.Driver)
-	if err != nil {
+	return controlWith(newController(cfg), action, level)
+}
+
+func controlWith(c *controls.Controller, action string, level int) error {
+	var result controls.Result
+	var snapshot []event.Event
+	var snapshotErr error
+	if err := withLock(c.Config, func() error {
+		var err error
+		result, err = c.ExecuteResult(action, level)
+		if err == nil && result.Motion {
+			snapshot, snapshotErr = c.Queue.Snapshot()
+		}
+		return err
+	}); err != nil {
 		return err
 	}
-	packet, err := driver.Packet(action, level)
-	if err != nil {
-		return err
-	}
-	if cfg.Treadmill.MAC == "" {
-		return errors.New("set treadmill.mac in config first")
-	}
-	return withLock(cfg, func() error {
-		if err := ble.Send(cfg.Treadmill.MAC, driver.WriteUUID(), packet); err != nil {
-			return err
-		}
-		if action == "status" {
-			fmt.Println("Status query sent. Device telemetry is not decoded.")
-			return nil
-		}
-		e := event.New(cfg.Device, event.Action(action), level)
-		if action == "resume" {
-			e.Action = event.Start
-		}
-		if err := event.NewClient(cfg.ServerURL, cfg.QueuePath()).Report(e); err != nil {
-			log.Printf("treadmill command sent; usage delivery: %v", err)
-		}
-		fmt.Printf("%s sent\n", action)
+	fmt.Println(result.Message)
+	if !result.Motion {
 		return nil
-	})
+	}
+	if snapshotErr == nil {
+		snapshotErr = deliver(c, snapshot)
+	}
+	if snapshotErr != nil {
+		log.Printf("command sent; usage delivery pending: %v", snapshotErr)
+	} else {
+		fmt.Println("Usage delivered.")
+	}
+	return nil
+}
+
+func syncUsage(c *controls.Controller) error {
+	var snapshot []event.Event
+	if err := withLock(c.Config, func() error {
+		var err error
+		snapshot, err = c.Sync()
+		return err
+	}); err != nil {
+		return err
+	}
+	return deliver(c, snapshot)
+}
+
+func deliver(c *controls.Controller, snapshot []event.Event) error {
+	if len(snapshot) == 0 {
+		return nil
+	}
+	if err := c.Queue.Post(snapshot); err != nil {
+		return err
+	}
+	return withLock(c.Config, func() error { return c.Queue.Acknowledge(snapshot) })
 }
 func serve(cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
