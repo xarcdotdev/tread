@@ -860,6 +860,27 @@ td.strong {
 .notice .icon {
   margin-top: 1px;
 }
+.notice > span {
+  flex: 1;
+}
+.notice-close {
+  flex: none;
+  margin: -4px -8px -4px 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 28px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.notice-close:hover,
+.notice-close:focus-visible {
+  opacity: 1;
+  background: rgb(0 0 0 / 0.06);
+}
 .notice.error {
   border-color: var(--bad-line);
   background: var(--bad-soft);
@@ -1191,6 +1212,12 @@ td.strong {
   color: var(--accent-strong);
   font-weight: 600;
 }
+.goals-page .goal-percent.met {
+  color: var(--good);
+}
+.goals-page .goal-percent.over {
+  color: var(--bad);
+}
 .goals-page .goal-unavailable {
   color: var(--warn);
   font-weight: 600;
@@ -1225,6 +1252,29 @@ td.strong {
 .goals-page progress::-moz-progress-bar {
   background: var(--accent);
   border-radius: 99px;
+}
+/* Met: green. Over: green up to the target, a thin gap, then red for the excess. */
+.goals-page progress.met::-webkit-progress-value {
+  background: var(--good);
+}
+.goals-page progress.met::-moz-progress-bar {
+  background: var(--good);
+}
+.goals-page progress.over::-webkit-progress-value {
+  background: linear-gradient(
+    to right,
+    var(--good) calc(var(--goal-target) - 1px),
+    var(--surface) 0 calc(var(--goal-target) + 1px),
+    var(--bad) 0
+  );
+}
+.goals-page progress.over::-moz-progress-bar {
+  background: linear-gradient(
+    to right,
+    var(--good) calc(var(--goal-target) - 1px),
+    var(--surface) 0 calc(var(--goal-target) + 1px),
+    var(--bad) 0
+  );
 }
 .goals-page .goals-config p {
   margin-top: 12px;

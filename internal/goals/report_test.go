@@ -111,7 +111,7 @@ func TestClippingWeightedAverageAndExceededTargets(t *testing.T) {
 		s := stats.Build(events, now, p.From, p.ID, c)
 		closeTo(t, p.Metrics[1].Current, s.Totals.Calories)
 		for _, m := range p.Metrics {
-			if !m.Available || m.Reason != "" || m.Progress != 100 || m.Current <= m.Target {
+			if !m.Available || m.Reason != "" || m.Current <= m.Target || m.Progress != m.Current/m.Target*100 {
 				t.Fatal(m)
 			}
 		}

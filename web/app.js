@@ -30,13 +30,51 @@ async function get(path) {
     throw new Error((await r.text()) || `Request failed (${r.status})`);
   return r.json();
 }
+// Same key and notices as the goals page, so a dismissal applies to both pages.
+const dismissKey = "tread.dismissed-notices";
+const dismissible = {
+  "step-length-estimate": "Steps use an approximate step length",
+};
+function noticeID(message) {
+  return Object.keys(dismissible).find((id) =>
+    message.startsWith(dismissible[id]),
+  );
+}
+function dismissedNotices() {
+  try {
+    return JSON.parse(localStorage.getItem(dismissKey)) || [];
+  } catch {
+    return [];
+  }
+}
+function dismissNotice(id) {
+  try {
+    localStorage.setItem(
+      dismissKey,
+      JSON.stringify([...new Set([...dismissedNotices(), id])]),
+    );
+  } catch {
+    // Without storage the notice still closes for this page view.
+  }
+}
 function notices(messages, error = false) {
+  const dismissed = dismissedNotices();
   $("notices").innerHTML = messages
-    .map(
-      (m) =>
-        `<div class="notice${error ? " error" : ""}">${icon(error ? "circle-alert" : "triangle-alert")}<span>${escapeHTML(m)}</span></div>`,
-    )
+    .filter((m) => !dismissed.includes(noticeID(m)))
+    .map((m) => {
+      const id = noticeID(m);
+      const close = id
+        ? `<button type="button" class="notice-close" data-dismiss="${id}" aria-label="Dismiss notice">×</button>`
+        : "";
+      return `<div class="notice${error ? " error" : ""}">${icon(error ? "circle-alert" : "triangle-alert")}<span>${escapeHTML(m)}</span>${close}</div>`;
+    })
     .join("");
+  $("notices").onclick = (e) => {
+    const close = e.target.closest?.("[data-dismiss]");
+    if (!close) return;
+    dismissNotice(close.dataset.dismiss);
+    close.closest(".notice").remove();
+  };
 }
 function timeZone() {
   return configuration.timezone === "Local" ? undefined : configuration.timezone;

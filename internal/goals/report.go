@@ -26,7 +26,8 @@ type Period struct {
 	Warnings    []string  `json:"warnings"`
 }
 
-// Metric.Current remains uncapped; Progress is a percentage in [0,100].
+// Metric.Current remains uncapped; Progress is a percentage of at least 0 that
+// exceeds 100 once the target is surpassed.
 // Unavailable metrics have zero progress; Current may be a partial estimate.
 type Metric struct {
 	ID        string  `json:"id"`
@@ -74,7 +75,7 @@ func Build(events []event.Event, now time.Time, cfg config.Config, targets Confi
 			}
 			m := Metric{ID: id, Label: label, Unit: unit, Current: current, Target: target, Available: available}
 			if available {
-				m.Progress = math.Min(100, math.Max(0, current/target*100))
+				m.Progress = math.Max(0, current/target*100)
 			} else {
 				m.Reason = reason
 			}

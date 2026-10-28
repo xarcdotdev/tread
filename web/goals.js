@@ -29,7 +29,45 @@ function goalValue(value, unit) {
     : `${goalNumber(value, unit === "steps" ? 0 : 2)} ${unit}`;
 }
 function goalPercent(progress) {
-  return Math.min(100, Math.max(0, progress));
+  return Math.max(0, progress);
+}
+// Same key and notices as the overview, so a dismissal applies to both pages.
+const dismissKey = "tread.dismissed-notices";
+const dismissible = {
+  "step-length-estimate": "Steps use an approximate step length",
+};
+function noticeID(message) {
+  return Object.keys(dismissible).find((id) => message.startsWith(dismissible[id]));
+}
+function dismissedNotices() {
+  try {
+    return JSON.parse(localStorage.getItem(dismissKey)) || [];
+  } catch {
+    return [];
+  }
+}
+function dismissNotice(id) {
+  try {
+    localStorage.setItem(dismissKey, JSON.stringify([...new Set([...dismissedNotices(), id])]));
+  } catch {
+    // Without storage the notice still closes for this page view.
+  }
+}
+function goalNotice(message) {
+  const id = noticeID(message);
+  const notice = goalElement("div", undefined, "notice");
+  notice.append(goalElement("span", message));
+  if (id) {
+    const close = goalElement("button", "×", "notice-close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Dismiss notice");
+    close.onclick = () => {
+      dismissNotice(id);
+      notice.remove();
+    };
+    notice.append(close);
+  }
+  return notice;
 }
 function goalDate(value) {
   // Server-provided civil date, including when its timezone is Local.
@@ -54,12 +92,14 @@ function goalMetric(period, metric) {
   const progress = goalPercent(metric.progress);
   // Never label a value below target as 100% due to display rounding.
   const percent = `${goalNumber(Math.floor(progress * 10) / 10, 1)}%`;
-  heading.append(goalElement("span", percent, "goal-percent"));
+  heading.append(goalElement("span", percent, `goal-percent${progress > 100 ? " over" : progress >= 100 ? " met" : ""}`));
   const values = `${goalValue(metric.current, metric.unit)} / ${goalValue(metric.target, metric.unit)}`;
   row.append(goalElement("p", values, "goal-values"));
-  const bar = goalElement("progress");
-  bar.max = 100;
+  // Past the target the bar rescales: the met target stays green, the excess turns red.
+  const bar = goalElement("progress", undefined, progress > 100 ? "over" : progress >= 100 ? "met" : undefined);
+  bar.max = Math.max(100, progress);
   bar.value = progress;
+  if (progress > 100) bar.style.setProperty("--goal-target", `${(100 / progress) * 100}%`);
   bar.setAttribute("aria-label", `${period.label} ${metric.label}`);
   bar.setAttribute("aria-valuetext", `${values}, ${percent}`);
   bar.textContent = percent;
@@ -91,8 +131,9 @@ function renderGoals(report) {
     }
     byID("goals-periods").append(card);
   }
+  const dismissed = dismissedNotices();
   for (const warning of warnings)
-    byID("notices").append(goalElement("div", warning, "notice"));
+    if (!dismissed.includes(noticeID(warning))) byID("notices").append(goalNotice(warning));
   byID("goals-status").textContent = configured
     ? ""
     : "No goals configured. A missing or empty goals.yaml is fine. See Configuration for the file path and example, then set your targets.";

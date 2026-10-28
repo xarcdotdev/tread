@@ -14,6 +14,7 @@ class Element {
     this.dataset = {};
     this.classList = new Set();
     this.classList.remove = this.classList.delete;
+    this.style = { setProperty: (key, value) => { this.style[key] = value; } };
     this._text = "";
   }
   set textContent(text) { this._text = String(text); this.children = []; }
@@ -68,7 +69,7 @@ function report() {
   };
 }
 
-test("initial loading, accessible capped bars, unavailable metrics, placeholders and safe text", async () => {
+test("initial loading, accessible uncapped bars, unavailable metrics, placeholders and safe text", async () => {
   const h = harness();
   const el = h.elements;
   assert.equal(el.refresh.disabled, true);
@@ -85,10 +86,12 @@ test("initial loading, accessible capped bars, unavailable metrics, placeholders
   assert.equal(el["goals-periods"].attributes["aria-busy"], "false");
   const bars = descendants(el["goals-periods"], "progress");
   assert.equal(bars.length, 3); // Unavailable calories have no misleading bar.
-  assert.equal(bars[0].value, 100);
-  assert.equal(bars[0].max, 100);
+  assert.equal(bars[0].value, 125);
+  assert.equal(bars[0].max, 125);
+  assert.equal(bars[0].className, "over");
+  assert.equal(bars[0].style["--goal-target"], "80%");
   assert.equal(bars[0].attributes["aria-label"], "Daily Steps");
-  assert.match(bars[0].attributes["aria-valuetext"], /125 steps \/ 100 steps, 100%/);
+  assert.match(bars[0].attributes["aria-valuetext"], /125 steps \/ 100 steps, 125%/);
   assert.equal(bars[2].value, 0);
   assert.match(bars[1].attributes["aria-valuetext"], /29m 59\.999s \/ 30m, 99\.9%/);
   assert.match(el["goals-periods"].textContent, /UnavailableTarget: 200 kcal\. Set weight <unsafe>\./);
