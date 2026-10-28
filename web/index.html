@@ -38,7 +38,7 @@
               <use href="/icons.svg#bluetooth" /></svg
           ></span>
           <div class="device-text">
-            <span>Treadmill</span><strong data-device>Usage tracker</strong>
+            <span data-link-label>Treadmill</span><strong data-device>Usage tracker</strong>
           </div>
           <span class="demo-label" data-demo hidden>Demo</span>
         </div>
@@ -76,6 +76,19 @@
           >
         </div>
         <div id="notices" aria-live="polite"></div>
+        <section class="card live" id="live" hidden aria-label="Live readings">
+          <div class="panel-title">
+            <span class="metric-icon tone-cyan"
+              ><svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#activity" /></svg
+            ></span>
+            <div>
+              <h2>Live</h2>
+              <p class="subtle">Reported by the treadmill · experimental</p>
+            </div>
+          </div>
+          <div class="live-stats" id="live-stats"></div>
+        </section>
         <section class="cards" aria-label="Usage totals">
           <article class="card metric tone-violet">
             <div class="metric-head">
@@ -243,6 +256,7 @@
         </footer>
       </main>
     </div>
+    <script src="/live.js" defer></script>
     <script src="/app.js" defer></script>
   </body>
 </html>

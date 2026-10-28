@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/xarcdotdev/oss-treadmill/internal/ble"
@@ -25,22 +23,29 @@ import (
 	"github.com/xarcdotdev/oss-treadmill/internal/store"
 )
 
-const usage = `usage: tread [-config path] <command> [options]
+const usage = `usage: tread [-config path] [-direct] <command> [options]
 
   start | resume | pause | stop    Control the treadmill and report usage
-  speed <1-8>                     Set a speed level and queue usage
-  toggle                          Toggle known running/paused/stopped state
-  speed-up | speed-down           Adjust known running speed by one level
+  speed <level>                   Set a driver speed level and queue usage
+  toggle                          Pause if running, otherwise start
+  speed-up | speed-down           Adjust running speed one level (down sets 1 if unknown)
   reset-state                     Forget local knowledge; preserve usage
-  status                          Send the device status query (no telemetry decoding)
-  sync                            Retry queued usage events
+  status                          Send a status query, not a command acknowledgment
+  observed [-json]                Read the agent's live device snapshot
+  sync                            Retry queued usage events through the agent
+  agent                           Run the signal-aware Bluetooth owner
   stats [-period 1w] [-json]       Usage from server (also supports -days N)
   config                          Show effective file-backed configuration
   serve [-demo] [-listen addr]     Run SQLite event API and dashboard
+  setup-host [-name tread.local]   Explicitly map a local hostname in /etc/hosts
   help                            Show help
 
 Periods: all, 3y, 1y, 3m, 1m, 1w, 1d
 Config: TREAD_CONFIG or ~/.config/tread/config.toml
+Controls use the agent, without fallback or automatic retry.
+-direct explicitly uses short-lived Bluetooth; -direct sync only delivers local usage.
+Runtime: TREAD_RUNTIME_DIR, else $XDG_RUNTIME_DIR/tread (created), else /run/tread.
+DFT200 speed levels are 1-8, not physical speed.
 Demo uses an isolated in-memory SQLite database and never uses Bluetooth.`
 
 func main() {
@@ -50,8 +55,13 @@ func main() {
 	}
 }
 func run(args []string) error {
+	return runWithSetupHost(args, setupHost)
+}
+
+func runWithSetupHost(args []string, setup func([]string) error) error {
 	root := flag.NewFlagSet("tread", flag.ContinueOnError)
 	path := root.String("config", "", "config file")
+	direct := root.Bool("direct", false, "explicit legacy control transport; sync delivers locally without Bluetooth")
 	root.Usage = func() { fmt.Println(usage) }
 	if err := root.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -69,17 +79,59 @@ func run(args []string) error {
 		fmt.Println(usage)
 		return nil
 	}
-	var cfg config.Config
-	var err error
-	if *path != "" {
-		cfg, err = config.LoadFile(*path)
-	} else {
-		cfg, err = config.Load()
-	}
-	if err != nil {
-		return fmt.Errorf("config: %w", err)
+	if cmd == "setup-host" {
+		return setup(args)
 	}
 	switch cmd {
+	case "start", "resume", "pause", "stop", "status", "speed", "toggle", "speed-up", "speed-down", "reset-state":
+		req, err := commandRequest(cmd, args)
+		if err != nil {
+			return err
+		}
+		if !*direct {
+			return agentControl(req)
+		}
+		// Own the host before loading configuration or touching local journals.
+		return withOwnership(func() error {
+			cfg, err := loadConfig(*path)
+			if err != nil {
+				return err
+			}
+			level := 0
+			if req.Level != nil {
+				level = *req.Level
+			}
+			return controlWith(newController(cfg), cmd, level)
+		})
+	case "observed":
+		if *direct {
+			return errors.New("observed requires the agent; omit -direct")
+		}
+		return showObserved(args)
+	case "sync":
+		if len(args) != 0 {
+			return errors.New("usage: tread [-direct] sync")
+		}
+		if !*direct {
+			return agentSync()
+		}
+	case "agent":
+		if len(args) != 0 {
+			return errors.New("usage: tread agent")
+		}
+		fallthrough
+	default:
+		if *direct {
+			return errors.New("-direct is only supported for control commands and sync")
+		}
+	}
+	cfg, err := loadConfig(*path)
+	if err != nil {
+		return err
+	}
+	switch cmd {
+	case "agent":
+		return runAgent(cfg)
 	case "serve":
 		return serve(cfg, args)
 	case "stats":
@@ -90,102 +142,44 @@ func run(args []string) error {
 		}
 		return json.NewEncoder(os.Stdout).Encode(cfg)
 	case "sync":
-		if len(args) > 0 {
-			return errors.New("usage: tread sync")
-		}
+		// Explicit direct sync is queue/network only, with no Bluetooth owner.
 		return syncUsage(newController(cfg))
-	case "start", "resume", "pause", "stop", "status", "speed", "toggle", "speed-up", "speed-down", "reset-state":
-		level := 0
-		if cmd == "speed" {
-			if len(args) != 1 {
-				return errors.New("usage: tread speed <1-8>")
-			}
-			level, err = strconv.Atoi(args[0])
-			if err != nil {
-				return errors.New("speed must be 1–8")
-			}
-		} else if len(args) > 0 {
-			return fmt.Errorf("%s takes no arguments", cmd)
-		}
-		return control(cfg, cmd, level)
 	default:
 		return fmt.Errorf("unknown command %q; use tread help", cmd)
 	}
 }
 
-// A file lock serializes separate CLI processes so simultaneous speed commands
-// cannot overwrite one another's offline events. This project targets Linux/BlueZ.
-func withLock(cfg config.Config, fn func() error) error {
-	if err := os.MkdirAll(filepath.Dir(cfg.QueuePath()), 0o700); err != nil {
-		return err
+func loadConfig(path string) (config.Config, error) {
+	var cfg config.Config
+	var err error
+	if path != "" {
+		cfg, err = config.LoadFile(path)
+	} else {
+		cfg, err = config.Load()
 	}
-	f, err := os.OpenFile(cfg.QueuePath()+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		return err
+		return cfg, fmt.Errorf("config: %w", err)
 	}
-	defer f.Close()
-	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	return fn()
+	return cfg, nil
+}
+
+func withLock(cfg config.Config, fn func() error) error {
+	return controls.WithLock(cfg, fn)
 }
 func newController(cfg config.Config) *controls.Controller {
 	return &controls.Controller{Config: cfg, Queue: event.NewClient(cfg.ServerURL, cfg.QueuePath()), Send: ble.Send}
 }
-func control(cfg config.Config, action string, level int) error {
-	return controlWith(newController(cfg), action, level)
-}
-
 func controlWith(c *controls.Controller, action string, level int) error {
-	var result controls.Result
-	var snapshot []event.Event
-	var snapshotErr error
-	if err := withLock(c.Config, func() error {
-		var err error
-		result, err = c.ExecuteResult(action, level)
-		if err == nil && result.Motion {
-			snapshot, snapshotErr = c.Queue.Snapshot()
-		}
-		return err
-	}); err != nil {
+	out, err := (&controls.Service{Controller: c}).Execute(action, level)
+	if err != nil {
 		return err
 	}
-	fmt.Println(result.Message)
-	if !result.Motion {
-		return nil
-	}
-	if snapshotErr == nil {
-		snapshotErr = deliver(c, snapshot)
-	}
-	if snapshotErr != nil {
-		log.Printf("command sent; usage delivery pending: %v", snapshotErr)
-	} else {
-		fmt.Println("Usage delivered.")
-	}
+	reportControl(out)
 	return nil
 }
 
 func syncUsage(c *controls.Controller) error {
-	var snapshot []event.Event
-	if err := withLock(c.Config, func() error {
-		var err error
-		snapshot, err = c.Sync()
-		return err
-	}); err != nil {
-		return err
-	}
-	return deliver(c, snapshot)
-}
-
-func deliver(c *controls.Controller, snapshot []event.Event) error {
-	if len(snapshot) == 0 {
-		return nil
-	}
-	if err := c.Queue.Post(snapshot); err != nil {
-		return err
-	}
-	return withLock(c.Config, func() error { return c.Queue.Acknowledge(snapshot) })
+	return (&controls.Service{Controller: c}).Sync()
 }
 func serve(cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -216,7 +210,9 @@ func serve(cfg config.Config, args []string) error {
 		log.Print("Demo mode: mock data, read-only API, isolated SQLite")
 	}
 	log.Printf("Dashboard: http://%s", *listen)
-	srv := http.Server{Addr: *listen, Handler: server.New(st, cfg, *mock).Handler(), ReadHeaderTimeout: 5 * time.Second}
+	app := server.New(st, cfg, *mock)
+	app.Live = agentSnapshot
+	srv := http.Server{Addr: *listen, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	return srv.ListenAndServe()
 }
 func showStats(cfg config.Config, args []string) error {

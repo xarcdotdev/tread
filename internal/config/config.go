@@ -23,12 +23,13 @@ type Personal struct {
 	StepLengthM float64 `toml:"step_length_m" json:"step_length_m"`
 }
 type Treadmill struct {
-	Driver       string             `toml:"driver" json:"driver"`
-	MAC          string             `toml:"mac" json:"mac"`
-	Name         string             `toml:"name" json:"name"`
-	InitialLevel int                `toml:"initial_level" json:"initial_level"`
-	SpeedKMH     map[string]float64 `toml:"speed_kmh" json:"speed_kmh"`
-	Calibrated   bool               `toml:"calibrated" json:"calibrated"`
+	Driver                   string             `toml:"driver" json:"driver"`
+	MAC                      string             `toml:"mac" json:"mac"`
+	Name                     string             `toml:"name" json:"name"`
+	InitialLevel             int                `toml:"initial_level" json:"initial_level"`
+	SpeedKMH                 map[string]float64 `toml:"speed_kmh" json:"speed_kmh"`
+	Calibrated               bool               `toml:"calibrated" json:"calibrated"`
+	ExperimentalVANTelemetry bool               `toml:"experimental_van_telemetry" json:"experimental_van_telemetry"`
 }
 type Config struct {
 	MAC       string    `toml:"mac" json:"-"` // legacy config
@@ -50,7 +51,7 @@ func Dir() string {
 	return filepath.Join(d, "tread")
 }
 func Default() Config {
-	return Config{Device: "dft200", Listen: "127.0.0.1:8080", ServerURL: "http://127.0.0.1:8080", DBPath: filepath.Join(Dir(), "tread.db"), Timezone: "UTC", Treadmill: Treadmill{Driver: "dft200", Name: "Sportstech DFT200", InitialLevel: 1, SpeedKMH: map[string]float64{}}}
+	return Config{Device: "dft200", Listen: "127.0.0.1:18743", ServerURL: "http://127.0.0.1:18743", DBPath: filepath.Join(Dir(), "tread.db"), Timezone: "UTC", Treadmill: Treadmill{Driver: "dft200", Name: "Sportstech DFT200", InitialLevel: 1, SpeedKMH: map[string]float64{}}}
 }
 func Load() (Config, error) {
 	path := os.Getenv("TREAD_CONFIG")

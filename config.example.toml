@@ -1,6 +1,7 @@
 # Copy to ~/.config/tread/config.toml or use tread -config ./config.toml.
-server_url = "http://127.0.0.1:8080"
-listen = "127.0.0.1:8080"
+# Set BOTH addresses when changing ports; neither setting updates the other.
+server_url = "http://127.0.0.1:18743"
+listen = "127.0.0.1:18743"
 # Use the SAME identifier on all controllers of this treadmill.
 device = "dft200"
 timezone = "Europe/Berlin"
@@ -20,6 +21,9 @@ name = "Sportstech DFT200"
 mac = "" # Find with bluetoothctl: scan on, devices
 initial_level = 1 # Actual level on first start; speed setting survives pauses
 calibrated = false
+# Opt in to experimental VAN telemetry when supported by the driver.
+# Live Bluetooth-host readings only; does not change calibration or history.
+experimental_van_telemetry = false
 
 [treadmill.speed_kmh]
 # Measure every level, then uncomment and fill in REAL values.

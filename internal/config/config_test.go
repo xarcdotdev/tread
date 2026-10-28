@@ -9,6 +9,92 @@ import (
 	"time"
 )
 
+func TestExperimentalVANTelemetry(t *testing.T) {
+	if Default().Treadmill.ExperimentalVANTelemetry {
+		t.Fatal("experimental telemetry must default off")
+	}
+	for _, tc := range []struct {
+		name, body string
+		want       bool
+		valid      bool
+	}{
+		{"missing", "", false, true},
+		{"disabled", "experimental_van_telemetry = false", false, true},
+		{"enabled", "experimental_van_telemetry = true", true, true},
+		{"not a boolean", "experimental_van_telemetry = \"true\"", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte("[treadmill]\n"+tc.body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadFile(path)
+			if (err == nil) != tc.valid {
+				t.Fatalf("LoadFile = %v, want valid %v", err, tc.valid)
+			}
+			if tc.valid && cfg.Treadmill.ExperimentalVANTelemetry != tc.want {
+				t.Fatalf("experimental telemetry = %v, want %v", cfg.Treadmill.ExperimentalVANTelemetry, tc.want)
+			}
+			if tc.valid {
+				data, err := json.Marshal(cfg.Treadmill)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var decoded struct {
+					Enabled *bool `json:"experimental_van_telemetry"`
+				}
+				if err := json.Unmarshal(data, &decoded); err != nil || decoded.Enabled == nil || *decoded.Enabled != tc.want {
+					t.Fatalf("telemetry JSON = %s, %v", data, err)
+				}
+			}
+		})
+	}
+}
+
+func TestDefaultAddresses(t *testing.T) {
+	cfg := Default()
+	if cfg.Listen != "127.0.0.1:18743" {
+		t.Fatalf("Listen = %q, want 127.0.0.1:18743", cfg.Listen)
+	}
+	if cfg.ServerURL != "http://"+cfg.Listen {
+		t.Fatalf("ServerURL = %q, want http://%s", cfg.ServerURL, cfg.Listen)
+	}
+
+	cfg, err := LoadFile(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Listen != "127.0.0.1:18743" || cfg.ServerURL != "http://127.0.0.1:18743" {
+		t.Fatalf("missing config addresses = %q, %q", cfg.Listen, cfg.ServerURL)
+	}
+}
+
+func TestLoadAddresses(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, listen, serverURL string
+	}{
+		{"defaults", "", "127.0.0.1:18743", "http://127.0.0.1:18743"},
+		{"old addresses", "listen = \"127.0.0.1:8080\"\nserver_url = \"http://127.0.0.1:8080\"", "127.0.0.1:8080", "http://127.0.0.1:8080"},
+		{"custom addresses", "listen = \"192.168.1.10:9090\"\nserver_url = \"https://tread.example:9443\"", "192.168.1.10:9090", "https://tread.example:9443"},
+		{"listen only", "listen = \"127.0.0.1:8080\"", "127.0.0.1:8080", "http://127.0.0.1:18743"},
+		{"server URL only", "server_url = \"http://127.0.0.1:8080\"", "127.0.0.1:18743", "http://127.0.0.1:8080"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tc.body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Listen != tc.listen || cfg.ServerURL != tc.serverURL {
+				t.Fatalf("addresses = %q, %q; want %q, %q", cfg.Listen, cfg.ServerURL, tc.listen, tc.serverURL)
+			}
+		})
+	}
+}
+
 func TestBirthdateValidation(t *testing.T) {
 	now := time.Date(2026, 6, 15, 0, 30, 0, 0, time.UTC)
 	for _, tc := range []struct {

@@ -226,6 +226,17 @@ code {
   background: var(--good);
   border: 2px solid var(--surface-2);
 }
+/* Link status from /api/live; green until the first poll answers. */
+.device-card[data-link="connecting"] .device-icon::after {
+  background: var(--warn);
+}
+.device-card[data-link="fault"] .device-icon::after {
+  background: var(--bad);
+}
+.device-card:is([data-link="off"], [data-link="disconnected"], [data-link="disabled"])
+  .device-icon::after {
+  background: var(--muted);
+}
 .device-text {
   display: flex;
   flex-direction: column;
@@ -555,6 +566,28 @@ h2 {
   height: 8px;
   border-radius: 3px;
   background: var(--accent);
+}
+.live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px 36px;
+  padding: 18px 22px;
+  margin-bottom: 18px;
+}
+.live-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 36px;
+}
+.live-stats small {
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.live-stats .stale strong {
+  color: var(--muted);
 }
 .chart-panel {
   display: flex;

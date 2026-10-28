@@ -4,6 +4,8 @@ package device
 
 import (
 	"fmt"
+
+	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 	"github.com/xarcdotdev/oss-treadmill/internal/protocol"
 )
 
@@ -12,6 +14,15 @@ type Driver interface {
 	WriteUUID() string
 }
 type DFT200 struct{}
+
+// Capabilities describes only the implemented command protocol. Experimental
+// telemetry fields are discovered per connection after the VAN handshake.
+func (DFT200) Capabilities() observed.Capabilities {
+	return observed.Capabilities{
+		Actions:     []string{"speed", "start", "resume", "stop", "pause", "status"},
+		SpeedLevels: &observed.LevelRange{Min: 1, Max: 8, Step: 1},
+	}
+}
 
 func (DFT200) WriteUUID() string { return protocol.WriteCharUUID }
 func (DFT200) Packet(action string, level int) ([]byte, error) {

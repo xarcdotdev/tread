@@ -4,4 +4,3 @@ todo.md
 *.db-shm
 *.db-wal
 docs/*
-!docs/van-fit-protocol.md

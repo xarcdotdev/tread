@@ -8,7 +8,7 @@ A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboa
 go run ./cmd/tread serve -demo
 ```
 
-Open <http://127.0.0.1:8080>. Demo mode generates over three years of history in an isolated, in-memory SQLite database. It never connects to Bluetooth or changes your real database. The API is read-only in demo mode. Stop it with Ctrl+C.
+Open <http://127.0.0.1:18743>. Demo mode generates over three years of history in an isolated, in-memory SQLite database. It never connects to Bluetooth or changes your real database. The API is read-only in demo mode. Stop it with Ctrl+C.
 
 The dashboard includes all time, 3 years, 1 year, 3 months, 1 month, 1 week and 1 day. It shows walking hours, estimated steps, time-weighted average speed, estimated calories, distance, activity bars, a speed-distribution donut and recent sessions. The configuration page shows personal settings and speed calibration. All assets are embedded; there are no frontend dependencies or CDN requests. Icons are a vendored subset of [Lucide](https://lucide.dev) (ISC, license in `web/icons.svg`).
 
@@ -27,18 +27,27 @@ Edit the file. Set `treadmill.mac`, personal measurements and measured belt spee
 
 Use `tread -config /path/to/config.toml ...` or `TREAD_CONFIG` for a different file. A missing default config uses defaults and does not enable Bluetooth. `tread config` prints the effective configuration.
 
-Run `tread serve` for the dashboard if it is not already running. No server restart is needed for controller or keybinding changes.
+The defaults are `listen = "127.0.0.1:18743"` and `server_url = "http://127.0.0.1:18743"`. The port is fixed; if it is occupied, startup fails rather than choosing a fallback. Existing explicit addresses, including port 8080, stay unchanged. To migrate an existing config, set both values:
+
+```toml
+listen = "127.0.0.1:18743"
+server_url = "http://127.0.0.1:18743"
+```
+
+These settings are independent. Overriding only one does not update the other.
+
+Run `tread serve` for the dashboard if it is not already running. Bare `tread` shows help; controls do not implicitly start a server. No server restart is needed for controller or keybinding changes.
 
 ### Controls and local state
 
 `start`, `resume`, `pause`, `stop` and `speed <1-8>` are explicit controls. `speed` takes a **level from 1 to 8**, transmitted as 10 to 80, not a known physical speed. `start` and `resume` send the same command. A speed command can start the belt even while stopped. Only issue movement commands deliberately, with the belt clear and when ready for movement.
 
-- `toggle` pauses a locally known running treadmill, or starts a locally known paused/stopped one. Unknown mode refuses the command.
-- `speed-up` and `speed-down` change one level only when both running mode and speed are locally known. At levels 8 and 1 respectively they do nothing, with no Bluetooth write or usage event.
+- `toggle` pauses a locally known running treadmill, otherwise starts it. With unknown mode it sends start, which leaves an already running belt running and establishes mode, so the next toggle pauses.
+- `speed-up` and `speed-down` change one level only when running mode is locally known; they refuse otherwise, because a speed command can start a stopped belt. With unknown speed, `speed-down` sets the lowest level and `speed-up` refuses. At levels 8 and 1 respectively they do nothing, with no Bluetooth write or usage event.
 - `reset-state` forgets local mode and speed without moving the belt. It preserves queued usage and confirmed pending events.
 - `status` sends a query but decodes no telemetry. It cannot discover or confirm mode or speed.
 
-A new installation starts with unknown knowledge; the new buttons cannot initialize it. When ready for movement, deliberately establish mode with an explicit `start` and speed with an explicit `speed`. For example, after checking the treadmill and surroundings:
+A new installation starts with unknown knowledge. `toggle` establishes mode by starting, and `speed-down` while running establishes speed at the lowest level; after that both speed keys work. An explicit `speed` also establishes speed. For example, after checking the treadmill and surroundings:
 
 ```sh
 tread start
@@ -66,11 +75,51 @@ tread help
 
 For a homeserver, run `serve` there and point the controller's `server_url` at it. Use only one controller/config for physical controls per treadmill to avoid divergent local knowledge. Keep a stable `device` identifier and keep personal metrics and calibration in the **server's** configuration. The API has no authentication; the server binds to localhost by default. Use a private network or an authenticated reverse proxy to make it available elsewhere.
 
+### Bluetooth agent and live readings
+
+`tread agent` owns the Bluetooth link: it holds a persistent connection, reconnects after drops, and accepts control commands over a private local socket. Control commands (`start`, `toggle`, `speed`, …), `reset-state`, `sync` and `observed` go through the agent by default. They are sent at most once and never fall back to direct Bluetooth. A command that arrives while the agent is still connecting waits up to 10 seconds for the link, then fails with "no command sent".
+
+Errors say whether anything reached the treadmill. "No command sent" (agent not running, device unavailable, another command in progress) is safe to repeat. "Command outcome unknown; do not retry" means the request may have been executed; check the treadmill before acting again.
+
+The agent's lock and socket live in a runtime directory: `TREAD_RUNTIME_DIR` if set, otherwise `$XDG_RUNTIME_DIR/tread`, otherwise `/run/tread`. tread creates `$XDG_RUNTIME_DIR/tread` (mode 0700) on demand. Any other directory must already exist, owned by you with mode 0700. Every process that controls the treadmill must use the same directory; it is what keeps a second Bluetooth owner out.
+
+`tread -direct <command>` skips the agent and opens a short-lived Bluetooth connection, as earlier versions did. It takes the same ownership lock, so it fails while the agent runs.
+
+`tread observed [-json]` prints the agent's live snapshot: connection, telemetry status and any readings. `tread serve` reads the same snapshot through `/api/live` without touching Bluetooth. The sidebar shows the link status, and the overview shows a live card while telemetry is active. Readings are what the treadmill reports, kept separate from history, which still comes from sent commands.
+
+Telemetry is off by default. `experimental_van_telemetry = true` enables the decoder recovered from the VAN FIT app (`docs/van-fit-protocol.md`). It works on a DFT200 but remains experimental. With the default unit byte, speed and distance are labelled km/h and km as inferred units: the treadmill's nominal speed, not your calibrated belt speed. The two will disagree.
+
+### Hyprland startup
+
+The CLI does not start the server implicitly. On the configured workstation below, the treadmill control wrapper starts or reuses the agent and server user services on the first control-key press; there is no startup at login. The wrapper then sends the requested movement command once, even if the server is unavailable, so offline usage can still queue. A brief readiness check does not retry the command. Normal Hyprland logout stops both services; crashes or forced termination may not. For manual control, use `systemctl --user stop tread.service tread-agent.service`; inspect logs with `journalctl --user -u tread-agent.service -u tread.service`.
+
+The optional browser shortcut below only opens the dashboard URL. It does not start the server.
+
+### Optional local hostname
+
+`tread setup-host [-name tread.local]` explicitly edits `/etc/hosts` to map the chosen name to `127.0.0.1` only. This is optional and does not start the server. Run:
+
+```sh
+sudo "$(command -v tread)" setup-host
+```
+
+Resolving the executable before `sudo` avoids sudo's possibly different `PATH`. Repeating the command is idempotent; an existing mapping to another address is an error, not overwritten. Only this system edit needs elevated permission.
+
+Open <http://tread.local:18743>. Hosts entries do not map ports, so `:18743` is still required. `.local` is reserved for mDNS and may conflict with your resolver setup. Use `sudo "$(command -v tread)" setup-host -name tread.localhost` and <http://tread.localhost:18743> instead, or skip the hosts edit and use <http://127.0.0.1:18743>.
+
+Optional Hyprland browser shortcut after hostname setup, using an illustrative key combination you should change if already bound. This opens the dashboard but does not start the server:
+
+```ini
+bind = SUPER, T, exec, xdg-open http://tread.local:18743
+```
+
 ### Kyria and Hyprland on this workstation
 
-The installed host bindings in `~/.config/hypr/UserConfigs/UserKeybinds.lua` are nonrepeating: F14 sends `speed-down`, F16 sends `toggle`, and F15 sends `speed-up`. `~/.config/hypr/UserScripts/TreadmillControl.sh` allows only those actions, invokes `~/.local/bin/tread` once and notifies on CLI failure without retrying. Unknown state therefore produces an error notification, not an assumed start or speed change.
+On this workstation, the installed nonrepeating host bindings in `~/.config/hypr/UserConfigs/UserKeybinds.lua` map F14 to `speed-down`, F16 to `toggle`, and F15 to `speed-up`. `~/.config/hypr/UserScripts/TreadmillControl.sh` validates those actions, starts or reuses `tread-agent.service` and `tread.service` with a bounded nonblocking request, waits briefly for a freshly started agent's socket, then invokes `~/.local/bin/tread` once regardless of server availability. It does not retry movement commands; offline usage remains queued. When it starts either service, it sends a notification naming them. Unknown mode makes `toggle` start the belt; with unknown speed, `speed-down` slows to level 1 and `speed-up` fails with an error notification.
 
-`~/.local/bin/tread` links to `/home/lman/Code/go/oss-treadmill/tread`; rebuild that ignored binary with `go build -o tread ./cmd/tread` after CLI changes. The Kyria NSL right-bottom three mappings are compiled in `/home/lman/Code/qmk/splitkb_kyria_rev2_base_xarcdev.uf2` but **not flashed**. The keyboard still needs a deliberate firmware flash before those keys emit the new mappings. Host binding installation does not initialize treadmill state.
+This workstation specifically has `~/.config/systemd/user/tread.service` and `tread-agent.service` linked into the dotfiles systemd configuration. They run `~/.local/bin/tread serve` and `~/.local/bin/tread agent` as user services and are not enabled at login. The agent unit has `TimeoutStopSec=10`, because shutdown can block on a stuck Bluetooth call. A native Hyprland shutdown hook stops both on normal logout. Generic installation does not create this service or wrapper behavior.
+
+`~/.local/bin/tread` links to `/home/lman/Code/go/oss-treadmill/tread`; rebuild that ignored binary with `go build -o tread ./cmd/tread` after CLI changes. The Kyria NSL right-bottom three mappings are compiled in `/home/lman/Code/qmk/splitkb_kyria_rev2_base_xarcdev.uf2` but **not flashed**. The keyboard still needs a deliberate firmware flash before those keys emit the new mappings. Host binding installation does not initialize treadmill state; the first toggle press starts the belt.
 
 ## Calibrate statistics
 
@@ -128,6 +177,9 @@ Demo mode uses illustrative targets in memory and sample history. It never reads
 
 ```text
 cmd/tread/          CLI, commands, server startup
+internal/agent/    Bluetooth owner process and its local socket API
+internal/ownership/ Runtime directory and single-owner lock
+internal/observed/ Live readings model, separate from history
 internal/ble/      Bluetooth transport
 internal/device/   Device driver selection and command encoding
 internal/protocol/ DFT200 packet format and checksum

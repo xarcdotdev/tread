@@ -17,6 +17,7 @@ import (
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
 	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
+	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 )
 
 type identity struct {
@@ -180,22 +181,33 @@ func (c *Controller) execute(action string, level int, motion *bool) (string, er
 		switch s.Mode {
 		case "running":
 			action = "pause"
-		case "paused", "stopped":
-			action = "start"
 		default:
-			return "", errors.New("running state unknown; use explicit start, pause, or stop first")
+			// Unknown mode starts: start is a no-op on a running belt and establishes mode.
+			action = "start"
 		}
 	case "speed-up", "speed-down":
-		if s.Mode != "running" || s.Speed == 0 {
-			return "", errors.New("speed adjustment requires known running state and speed; use explicit start and speed first")
+		// A speed command can start a stopped belt, so require known running mode.
+		if s.Mode != "running" {
+			return "", errors.New("speed adjustment requires known running state; use toggle or start first")
 		}
-		level = s.Speed
-		if action == "speed-up" {
-			level++
-		} else {
-			level--
+		if s.Speed == 0 {
+			if action == "speed-up" {
+				return "", errors.New("speed-up requires known speed; use speed-down or an explicit speed first")
+			}
+			// Unknown speed only ever slows down, to the lowest level.
+			r, err := speedLevels(driver)
+			if err != nil {
+				return "", err
+			}
+			level, action = r.Min, "speed"
+			break
 		}
-		if level < 1 || level > 8 {
+		var bounded bool
+		level, bounded, err = relativeLevel(driver, s.Speed, action)
+		if err != nil {
+			return "", err
+		}
+		if bounded {
 			return fmt.Sprintf("Speed already at level %d; no command sent.", s.Speed), nil
 		}
 		action = "speed"
@@ -256,6 +268,41 @@ func (c *Controller) execute(action string, level int, motion *bool) (string, er
 	}
 	*motion = true
 	return fmt.Sprintf("%s sent; usage queued", action), nil
+}
+
+// relativeLevel uses optional command metadata, never telemetry or calibration.
+// The journal and usage events retain their legacy level 1-8 contract.
+func speedLevels(driver device.Driver) (*observed.LevelRange, error) {
+	caps := device.CapabilitiesFor(driver)
+	r := caps.SpeedLevels
+	canSpeed := false
+	for _, action := range caps.Actions {
+		canSpeed = canSpeed || action == "speed"
+	}
+	if !canSpeed || r == nil || r.Min < 1 || r.Max < r.Min || r.Step < 1 {
+		return nil, errors.New("relative speed adjustment unsupported; use an explicit speed level")
+	}
+	return r, nil
+}
+
+func relativeLevel(driver device.Driver, speed int, action string) (level int, bounded bool, err error) {
+	r, err := speedLevels(driver)
+	if err != nil {
+		return 0, false, err
+	}
+	if speed < r.Min || speed > r.Max || (speed-r.Min)%r.Step != 0 {
+		return 0, false, errors.New("known speed is outside driver level metadata; use an explicit speed level")
+	}
+	if action == "speed-up" {
+		if r.Step > r.Max-speed {
+			return speed, true, nil
+		}
+		return speed + r.Step, false, nil
+	}
+	if r.Step > speed-r.Min {
+		return speed, true, nil
+	}
+	return speed - r.Step, false, nil
 }
 
 func (c *Controller) clearMarker() error {

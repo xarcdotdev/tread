@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
 	"github.com/xarcdotdev/oss-treadmill/internal/goals"
+	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 	"github.com/xarcdotdev/oss-treadmill/internal/stats"
 	"github.com/xarcdotdev/oss-treadmill/internal/store"
 	"github.com/xarcdotdev/oss-treadmill/web"
@@ -20,6 +22,8 @@ type Server struct {
 	store *store.Store
 	cfg   config.Config
 	demo  bool
+	// Live reads the local agent's snapshot. The server never touches Bluetooth.
+	Live func(context.Context) (observed.Snapshot, error)
 }
 
 func New(s *store.Store, cfg config.Config, demo bool) *Server {
@@ -36,6 +40,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/events", s.postEvents)
 	mux.HandleFunc("GET /api/stats", s.getStats)
 	mux.HandleFunc("GET /api/goals", s.getGoals)
+	mux.HandleFunc("GET /api/live", s.getLive)
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		c, err := s.settings()
 		if err != nil {
@@ -59,6 +64,29 @@ func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(v)
+}
+
+type liveResponse struct {
+	Available bool               `json:"available"`
+	Reason    string             `json:"reason,omitempty"`
+	Snapshot  *observed.Snapshot `json:"snapshot,omitempty"`
+}
+
+// getLive reports the agent snapshot, or why none is available. It never fails:
+// a missing agent is a normal state for the dashboard.
+func (s *Server) getLive(w http.ResponseWriter, r *http.Request) {
+	if s.demo || s.Live == nil {
+		writeJSON(w, liveResponse{Reason: "live readings unavailable in demo mode"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+	snapshot, err := s.Live(ctx)
+	if err != nil {
+		writeJSON(w, liveResponse{Reason: err.Error()})
+		return
+	}
+	writeJSON(w, liveResponse{Available: true, Snapshot: &snapshot})
 }
 
 // postEvents accepts a JSON array of events.

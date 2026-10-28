@@ -61,17 +61,12 @@ func events(t *testing.T, c *Controller) []event.Event {
 }
 func TestKnowledgeAndPackets(t *testing.T) {
 	c, packets := fixture(t)
-	if _, err := c.Execute("toggle", 0); err == nil {
-		t.Fatal("unknown toggle allowed")
-	}
 	execute(t, c, "speed", 3)
 	if _, err := c.Execute("speed-up", 0); err == nil {
 		t.Fatal("speed invented mode")
 	}
-	if _, err := c.Execute("toggle", 0); err == nil {
-		t.Fatal("speed invented mode")
-	}
-	for _, a := range []string{"start", "speed-up", "toggle", "toggle", "stop", "toggle", "resume"} {
+	// Unknown mode toggles to start.
+	for _, a := range []string{"toggle", "speed-up", "toggle", "toggle", "stop", "toggle", "resume"} {
 		execute(t, c, a, 0)
 	}
 	wants := []struct {
@@ -105,6 +100,11 @@ func TestNoInventedSpeedAndBounds(t *testing.T) {
 	execute(t, c, "start", 0)
 	if _, err := c.Execute("speed-up", 0); err == nil {
 		t.Fatal("initial_level inferred")
+	}
+	// Unknown running speed slows to the lowest level.
+	execute(t, c, "speed-down", 0)
+	if s, _ := c.load(); s.Speed != 1 {
+		t.Fatal(s)
 	}
 	for _, tc := range []struct {
 		level  int
@@ -157,8 +157,8 @@ func TestInvalidationsPreservePending(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := c.Execute("toggle", 0); err == nil {
-				t.Fatal("stale toggle allowed")
+			if _, err := c.Execute("speed-up", 0); err == nil {
+				t.Fatal("stale speed-up allowed")
 			}
 			if len(*p) != 2 {
 				t.Fatal("sent")
@@ -348,7 +348,8 @@ func TestStatusDoesNotObserve(t *testing.T) {
 	if len(*p) != 1 || len(events(t, c)) != 0 {
 		t.Fatal("status reporting")
 	}
-	if _, err := c.Execute("toggle", 0); err == nil {
+	execute(t, c, "toggle", 0)
+	if start, _ := (device.DFT200{}).Packet("start", 0); !bytes.Equal((*p)[1], start) {
 		t.Fatal("status observed mode")
 	}
 }
