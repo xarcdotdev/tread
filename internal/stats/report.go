@@ -41,24 +41,47 @@ type Report struct {
 	CaloriesAvailable bool      `json:"calories_available"`
 }
 
+// CalendarBoundary resolves a civil date to its first valid instant in loc.
+// A missing midnight uses the forward transition; a repeated midnight uses its
+// first occurrence. A wholly skipped date resolves to the next valid date.
+func CalendarBoundary(year int, month time.Month, day int, loc *time.Location) time.Time {
+	civil := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	// IANA offsets are less than 24 hours. Walk zone intervals in chronological
+	// order rather than relying on time.Date's choice for gaps and overlaps.
+	for cursor := civil.Add(-48 * time.Hour).In(loc); ; {
+		_, offset := cursor.Zone()
+		_, end := cursor.ZoneBounds()
+		candidate := civil.Add(-time.Duration(offset) * time.Second).In(loc)
+		if candidate.Before(cursor) {
+			candidate = cursor
+		}
+		if end.IsZero() || candidate.Before(end) {
+			return candidate
+		}
+		cursor = end
+	}
+}
+
 func PeriodStart(period string, now time.Time, loc *time.Location) (time.Time, error) {
 	n := now.In(loc)
-	day := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, loc)
+	// Do date arithmetic in UTC, then resolve the intended local boundary once.
+	day := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+	resolve := func(d time.Time) time.Time { return CalendarBoundary(d.Year(), d.Month(), d.Day(), loc) }
 	switch period {
 	case "all":
-		return time.Date(1970, 1, 1, 0, 0, 0, 0, loc), nil
+		return CalendarBoundary(1970, 1, 1, loc), nil
 	case "3y":
-		return subtractMonths(day, 36), nil
+		return resolve(subtractMonths(day, 36)), nil
 	case "1y":
-		return subtractMonths(day, 12), nil
+		return resolve(subtractMonths(day, 12)), nil
 	case "3m":
-		return subtractMonths(day, 3), nil
+		return resolve(subtractMonths(day, 3)), nil
 	case "1m":
-		return subtractMonths(day, 1), nil
+		return resolve(subtractMonths(day, 1)), nil
 	case "1w":
-		return day.AddDate(0, 0, -6), nil
+		return resolve(day.AddDate(0, 0, -6)), nil
 	case "1d":
-		return day, nil
+		return resolve(day), nil
 	}
 	return time.Time{}, fmt.Errorf("period must be all, 3y, 1y, 3m, 1m, 1w or 1d")
 }
@@ -129,7 +152,7 @@ func Build(events []event.Event, now, from time.Time, period string, cfg config.
 				}
 				for a.Before(b) {
 					local := a.In(cfg.Location())
-					midnight := time.Date(local.Year(), local.Month(), local.Day()+1, 0, 0, 0, 0, cfg.Location())
+					midnight := CalendarBoundary(local.Year(), local.Month(), local.Day()+1, cfg.Location())
 					end := b
 					if midnight.Before(end) {
 						end = midnight
@@ -174,16 +197,24 @@ func Build(events []event.Event, now, from time.Time, period string, cfg config.
 	if period == "all" {
 		start = now
 		for _, d := range dayMap {
-			t, _ := time.ParseInLocation(time.DateOnly, d.Date, cfg.Location())
+			civil, _ := time.Parse(time.DateOnly, d.Date)
+			t := CalendarBoundary(civil.Year(), civil.Month(), civil.Day(), cfg.Location())
 			if t.Before(start) {
 				start = t
 			}
 		}
 	}
 	n := start.In(cfg.Location())
-	start = time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, cfg.Location())
-	for d := start; !d.After(now); d = d.AddDate(0, 0, 1) {
+	start = time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+	for d := start; ; d = d.AddDate(0, 0, 1) {
+		boundary := CalendarBoundary(d.Year(), d.Month(), d.Day(), cfg.Location())
+		if boundary.After(now) {
+			break
+		}
 		key := d.Format(time.DateOnly)
+		if boundary.Format(time.DateOnly) != key {
+			continue // A wholly skipped local date has no bucket.
+		}
 		bucket := dayMap[key]
 		if bucket == nil {
 			bucket = &Bucket{Date: key}

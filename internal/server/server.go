@@ -10,6 +10,7 @@ import (
 
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
+	"github.com/xarcdotdev/oss-treadmill/internal/goals"
 	"github.com/xarcdotdev/oss-treadmill/internal/stats"
 	"github.com/xarcdotdev/oss-treadmill/internal/store"
 	"github.com/xarcdotdev/oss-treadmill/web"
@@ -34,6 +35,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/events", s.postEvents)
 	mux.HandleFunc("GET /api/stats", s.getStats)
+	mux.HandleFunc("GET /api/goals", s.getGoals)
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		c, err := s.settings()
 		if err != nil {
@@ -74,6 +76,55 @@ func (s *Server) postEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type goalsResponse struct {
+	goals.Report
+	Path     string `json:"path"`
+	Timezone string `json:"timezone"`
+	Device   string `json:"device"`
+	Demo     bool   `json:"demo"`
+	ReadOnly bool   `json:"read_only"`
+}
+
+func (s *Server) getGoals(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	cfg, err := s.settings()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	path := goals.Path(cfg)
+	var targets goals.Config
+	if s.demo {
+		// In-memory examples only. Never open the user's goals file in demo mode.
+		path = "Built-in sample targets (no file)"
+		targets = goals.Config{
+			Daily:   goals.Targets{Steps: 6000, Calories: 250, Time: 30 * time.Minute, AverageSpeedKMH: 3.5},
+			Weekly:  goals.Targets{Time: 5 * time.Hour},
+			Monthly: goals.Targets{Steps: 150000},
+			Yearly:  goals.Targets{Time: 250 * time.Hour},
+		}
+	} else {
+		targets, err = goals.LoadFile(path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	now := time.Now()
+	// Include preceding events so sessions crossing calendar boundaries survive.
+	events, err := s.store.Events(time.Unix(0, 0), now.Add(time.Millisecond))
+	if err != nil {
+		log.Printf("load goals events: %v", err)
+		http.Error(w, "load failed", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, goalsResponse{
+		Report: goals.Build(events, now, cfg, targets),
+		Path:   path, Timezone: cfg.Timezone, Device: cfg.Treadmill.Name,
+		Demo: s.demo, ReadOnly: true,
+	})
 }
 
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {

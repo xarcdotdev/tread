@@ -1,0 +1,14 @@
+# Copy to goals.yaml beside config.toml. All periods and metrics are optional.
+# Weeks start Monday; calendar boundaries use config.toml's timezone.
+# time is walking time, calories are kcal, speed is distance / walking hours.
+daily:
+  steps: 6000
+  calories: 250
+  time: 30m
+  average_speed_kmh: 3.5
+weekly:
+  time: 5h
+monthly:
+  steps: 150000
+yearly:
+  time: 250h

@@ -78,6 +78,69 @@ func TestDaylightSavingWalkingDuration(t *testing.T) {
 	}
 }
 
+func TestMidnightTransitionSplitting(t *testing.T) {
+	for _, tc := range []struct {
+		zone, start, stop, first, second string
+		firstHours                       float64
+	}{
+		{"America/Santiago", "2024-09-07T23:30:00-04:00", "2024-09-08T01:30:00-03:00", "2024-09-07", "2024-09-08", .5},
+		{"Africa/Cairo", "2024-04-25T23:30:00+02:00", "2024-04-26T01:30:00+03:00", "2024-04-25", "2024-04-26", .5},
+		{"America/Santiago", "2024-04-06T23:30:00-03:00", "2024-04-07T00:30:00-04:00", "2024-04-06", "2024-04-07", 1.5},
+		{"Africa/Cairo", "2024-10-31T23:30:00+03:00", "2024-11-01T00:30:00+02:00", "2024-10-31", "2024-11-01", 1.5},
+	} {
+		t.Run(tc.zone+tc.start, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Timezone = tc.zone
+			start, _ := time.Parse(time.RFC3339, tc.start)
+			stop, _ := time.Parse(time.RFC3339, tc.stop)
+			events := []event.Event{{Action: event.Start, TS: start}, {Action: event.Stop, TS: stop}}
+			r := Build(events, stop, start, "all", cfg)
+			if len(r.Days) != 2 || r.Days[0].Date != tc.first || r.Days[1].Date != tc.second || r.Days[0].Hours != tc.firstHours || r.Days[1].Hours != .5 || r.Totals.Hours != tc.firstHours+.5 {
+				t.Fatalf("wrong midnight split: %+v, totals %+v", r.Days, r.Totals)
+			}
+		})
+	}
+}
+
+func TestMidnightRollingStartsAndEmptyDays(t *testing.T) {
+	for _, zone := range []string{"America/Santiago", "Africa/Cairo"} {
+		t.Run(zone, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Timezone = zone
+			date := "2024-09-08"
+			if zone == "Africa/Cairo" {
+				date = "2024-04-26"
+			}
+			now, _ := time.ParseInLocation("2006-01-02 15:04", date+" 12:00", cfg.Location())
+			start, err := PeriodStart("1d", now, cfg.Location())
+			if err != nil || start.Format("2006-01-02 15:04") != date+" 01:00" {
+				t.Fatalf("%v %v", start, err)
+			}
+			week, _ := PeriodStart("1w", now, cfg.Location())
+			if week.Hour() != 0 || week.Day() != now.Day()-6 {
+				t.Fatal(week)
+			}
+			// Include the next day at 00:30: iterating from 01:00 must not omit it.
+			next := CalendarBoundary(now.Year(), now.Month(), now.Day()+1, cfg.Location()).Add(30 * time.Minute)
+			r := Build(nil, next, week, "1w", cfg)
+			if len(r.Days) != 8 || r.Days[6].Date != date || r.Days[7].Date != next.Format(time.DateOnly) {
+				t.Fatal(r.Days)
+			}
+		})
+	}
+}
+
+func TestRepeatedMidnightUsesFirstOccurrence(t *testing.T) {
+	loc, err := time.LoadLocation("America/Havana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := CalendarBoundary(2024, 11, 3, loc)
+	if got.Format(time.RFC3339) != "2024-11-03T00:00:00-04:00" {
+		t.Fatal(got)
+	}
+}
+
 func TestCalendarMonthRange(t *testing.T) {
 	now := time.Date(2026, 3, 31, 12, 0, 0, 0, time.UTC)
 	got, err := PeriodStart("1m", now, time.UTC)

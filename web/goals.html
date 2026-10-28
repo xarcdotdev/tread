@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#7e43fe" />
+    <title>Goals · tread</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="loading goals-page">
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="/"
+          ><span class="brand-mark"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#activity" /></svg></span
+          ><span>tread<b>.</b></span></a
+        >
+        <nav class="nav" aria-label="Main">
+          <div class="nav-label">Menu</div>
+          <a href="/" aria-label="Overview"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#layout-dashboard" /></svg
+            ><span>Overview</span></a
+          ><a class="active" aria-current="page" href="/goals.html" aria-label="Goals"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#trending-up" /></svg
+            ><span>Goals</span></a
+          ><a href="/settings.html" aria-label="Configuration"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#sliders-horizontal" /></svg
+            ><span>Configuration</span></a
+          >
+        </nav>
+        <div class="device-card">
+          <span class="device-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#bluetooth" /></svg
+          ></span>
+          <div class="device-text">
+            <span>Treadmill</span><strong data-device>Usage tracker</strong>
+          </div>
+          <span class="demo-label" data-demo hidden>Demo</span>
+        </div>
+      </aside>
+      <main>
+        <header class="page-head">
+          <h1>Goals</h1>
+          <div class="head-actions">
+            <span class="chip">Calendar targets</span>
+            <button class="btn" id="refresh" disabled>
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#refresh-cw" /></svg
+              >Refresh
+            </button>
+          </div>
+        </header>
+        <p class="goals-calendar" id="goals-calendar">
+          Calendar days, Monday-start weeks, months and years. Progress counts walking through now.
+        </p>
+        <div id="notices" aria-live="polite"></div>
+        <div id="goals-status" role="status">Loading goals…</div>
+        <section class="goals-grid" id="goals-periods" aria-label="Calendar goals" aria-busy="true"></section>
+        <section class="card panel goals-config" aria-labelledby="goals-config-title">
+          <h2 id="goals-config-title">Read-only goal configuration</h2>
+          <p>Goals file: <code id="goals-path">Loading…</code></p>
+          <p id="goals-edit-help">Copy <code>goals.example.yaml</code> to <code>goals.yaml</code> beside your server's <code>config.toml</code>. Edit it on the server, then Refresh. Refresh also reloads the personal profile, timezone and speed calibration. No restart is needed.</p>
+          <p>All periods and targets are optional. Include only what you want to track. Targets must be positive: integer steps, kcal, Go duration strings such as <code>30m</code> or <code>1h30m</code>, and average speed in km/h.</p>
+          <pre aria-label="Example goals YAML"><code>daily:
+  steps: 6000
+  calories: 250
+  time: 30m
+  average_speed_kmh: 3.5
+weekly:
+  time: 5h
+monthly:
+  steps: 150000
+yearly:
+  time: 250h</code></pre>
+          <p>Walking time excludes pauses. Average speed is distance divided by walking hours, not an average of levels. Steps need step length or height; calories need weight. Missing speed calibration can make these estimates unavailable. Values above target stay visible; bars stop at 100%.</p>
+        </section>
+        <footer class="footer">
+          <span>tread · Make room for movement.</span>
+          <a href="/settings.html">View profile and calibration</a>
+        </footer>
+      </main>
+    </div>
+    <script src="/goals.js" defer></script>
+  </body>
+</html>

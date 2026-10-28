@@ -1109,3 +1109,111 @@ td.strong {
   width: 14px;
   height: 14px;
 }
+
+/* Goals: calendar cards, separate from the overview's charts. */
+.goals-page .goals-calendar,
+.goals-page #goals-status {
+  color: var(--ink-2);
+  margin-bottom: 18px;
+  line-height: 1.6;
+}
+.goals-page #goals-status:empty {
+  display: none;
+}
+.goals-page .goals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.goals-page .goal-range {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin: 6px 0 18px;
+}
+.goals-page .goal-placeholder,
+.goals-page .goal-reason,
+.goals-page .goals-config p {
+  color: var(--ink-2);
+  line-height: 1.65;
+}
+.goals-page .goal-metric + .goal-metric {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.goals-page .goal-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.goals-page .goal-metric h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+.goals-page .goal-percent {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+.goals-page .goal-unavailable {
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 13px;
+}
+.goals-page .goal-values,
+.goals-page .goal-reason {
+  margin: 6px 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.goals-page progress {
+  display: block;
+  width: 100%;
+  height: 12px;
+  border: 0;
+  border-radius: 99px;
+  overflow: hidden;
+  appearance: none;
+  background: var(--accent-soft);
+  color: var(--accent);
+  accent-color: var(--accent);
+}
+.goals-page progress::-webkit-progress-bar {
+  background: var(--accent-soft);
+}
+.goals-page progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 99px;
+}
+.goals-page progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 99px;
+}
+.goals-page .goals-config p {
+  margin-top: 12px;
+}
+.goals-page .goals-config code {
+  overflow-wrap: anywhere;
+}
+.goals-page .goals-config pre {
+  margin: 18px 0;
+  padding: 18px;
+  overflow-x: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  line-height: 1.6;
+}
+.goals-page pre code {
+  padding: 0;
+  border: 0;
+}
+@media (max-width: 900px) {
+  .goals-page .goals-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
