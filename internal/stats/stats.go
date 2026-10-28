@@ -1,9 +1,9 @@
 // Package stats derives walking sessions from control events.
-// The DFT200 reports nothing back, so everything here is an estimate
-// based on what the controllers sent.
+// Telemetry is not decoded. Estimates use the commands recorded by controllers.
 package stats
 
 import (
+	"sort"
 	"time"
 
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
@@ -13,20 +13,30 @@ type Options struct {
 	// PauseTimeout ends a session after it has been paused this long (the treadmill sleeps).
 	PauseTimeout time.Duration
 	// MaxRunning caps a running stretch without any events (missed stop, remote control).
-	MaxRunning time.Duration
-	// KmhPerLevel converts a speed level to km/h. TODO: measure the real DFT200 values.
+	MaxRunning   time.Duration
+	InitialLevel int
+	// KmhPerLevel converts a speed level using user calibration.
 	KmhPerLevel func(level int) float64
 }
 
 func DefaultOptions() Options {
 	return Options{
+		InitialLevel: 1,
 		PauseTimeout: 270 * time.Second,
 		MaxRunning:   2 * time.Hour,
 		KmhPerLevel:  func(level int) float64 { return float64(level) },
 	}
 }
 
+type Span struct {
+	Start, End time.Time
+	Level      int
+	KMH        float64
+}
+
 type Session struct {
+	Device   string        `json:"device"`
+	Spans    []Span        `json:"-"`
 	Start    time.Time     `json:"start"`
 	End      time.Time     `json:"end"`
 	Walking  time.Duration `json:"walking_ns"`
@@ -39,7 +49,7 @@ func Sessions(events []event.Event, now time.Time, opt Options) []Session {
 		out     []Session
 		cur     *Session
 		running bool
-		level   = 1 // the treadmill resumes at the last level; assume 1 when unknown
+		level   = opt.InitialLevel // the treadmill resumes at the last level; assume 1 when unknown
 		since   time.Time
 	)
 
@@ -54,7 +64,9 @@ func Sessions(events []event.Event, now time.Time, opt Options) []Session {
 		}
 		if d > 0 {
 			cur.Walking += d
-			cur.Distance += opt.KmhPerLevel(level) * d.Hours()
+			speed := opt.KmhPerLevel(level)
+			cur.Distance += speed * d.Hours()
+			cur.Spans = append(cur.Spans, Span{Start: since, End: since.Add(d), Level: level, KMH: speed})
 		}
 		since = t
 	}
@@ -77,12 +89,17 @@ func Sessions(events []event.Event, now time.Time, opt Options) []Session {
 		}
 	}
 
+	events = append([]event.Event(nil), events...)
+	sort.SliceStable(events, func(i, j int) bool { return events[i].TS.Before(events[j].TS) })
 	for _, e := range events {
+		if e.TS.After(now) {
+			continue
+		}
 		expire(e.TS)
 		switch e.Action {
 		case event.Start:
 			if cur == nil {
-				cur = &Session{Start: e.TS}
+				cur = &Session{Start: e.TS, Device: e.Device}
 			}
 			advance(e.TS)
 			running, since = true, e.TS
@@ -90,8 +107,10 @@ func Sessions(events []event.Event, now time.Time, opt Options) []Session {
 			advance(e.TS)
 			level = e.Value
 		case event.Pause:
-			advance(e.TS)
-			running, since = false, e.TS
+			if running {
+				advance(e.TS)
+				running, since = false, e.TS
+			}
 		case event.Stop:
 			if cur != nil {
 				end(e.TS)
@@ -101,27 +120,6 @@ func Sessions(events []event.Event, now time.Time, opt Options) []Session {
 	expire(now)
 	if cur != nil {
 		end(now)
-	}
-	return out
-}
-
-type Day struct {
-	Date     string        `json:"date"` // YYYY-MM-DD in loc
-	Walking  time.Duration `json:"walking_ns"`
-	Distance float64       `json:"distance_km"`
-}
-
-// Daily sums sessions per local day (by session start).
-func Daily(sessions []Session, loc *time.Location) []Day {
-	var out []Day
-	for _, s := range sessions {
-		date := s.Start.In(loc).Format(time.DateOnly)
-		if len(out) == 0 || out[len(out)-1].Date != date {
-			out = append(out, Day{Date: date})
-		}
-		d := &out[len(out)-1]
-		d.Walking += s.Walking
-		d.Distance += s.Distance
 	}
 	return out
 }

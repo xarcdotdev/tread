@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Configuration · tread</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/"
+        ><span class="brand-mark">↗</span>tread<span style="color: #a5b297"
+          >.</span
+        ></a
+      >
+      <nav class="nav" aria-label="Main">
+        <a href="/">Overview</a
+        ><a class="active" aria-current="page" href="/settings.html"
+          >Configuration</a
+        >
+      </nav>
+      <div class="status">
+        <span class="dot"></span
+        ><span class="device-name" data-device>Usage tracker</span
+        ><span class="demo-label" data-demo hidden>DEMO DATA</span>
+      </div>
+    </header>
+    <main>
+      <div class="eyebrow">Make it your own</div>
+      <div class="heading">
+        <div>
+          <h1>Your configuration</h1>
+          <p>Personal measurements and the details behind your statistics.</p>
+        </div>
+        <span class="read-only">Read from config file</span>
+      </div>
+      <div id="notices" aria-live="polite"></div>
+      <div class="settings-grid">
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>Personal profile</h2>
+              <p class="subtle">
+                Used to estimate steps and energy expenditure
+              </p>
+            </div>
+            <span class="metric-icon">◎</span>
+          </div>
+          <div class="settings-list" id="personal"></div>
+          <div class="info">
+            Steps use your measured step length, or an approximate 41.4% of your
+            height. Calories use speed-based treadmill MET values and your
+            resting energy. With weight, height, age and male/female gender
+            supplied, resting energy uses Mifflin-St Jeor. Otherwise the
+            baseline is 1 kcal/kg/hour. Calories include resting energy during
+            walking.
+          </div>
+        </section>
+        <section class="card panel">
+          <div class="panel-head">
+            <div>
+              <h2>Treadmill</h2>
+              <p class="subtle">The device controlled by your CLI</p>
+            </div>
+            <span class="metric-icon">↗</span>
+          </div>
+          <div class="settings-list" id="device"></div>
+          <div class="info">
+            Use the same device identifier in every controller config for this
+            treadmill. The initial level must match the belt's actual speed on
+            first start. Commands sent with another remote are not recorded.
+          </div>
+        </section>
+        <section class="card panel wide">
+          <div class="panel-head">
+            <div>
+              <h2>Speed calibration</h2>
+              <p class="subtle">Physical belt speed at each command level</p>
+            </div>
+            <span class="read-only" id="calibration-state">Not calibrated</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Speed level</th>
+                  <th>Kilometres / hour</th>
+                  <th>Metres / second</th>
+                  <th>Relative speed</th>
+                </tr>
+              </thead>
+              <tbody id="calibration"></tbody>
+            </table>
+          </div>
+          <div class="info">
+            Measure the belt length in metres, count full belt revolutions over
+            a timed interval, then calculate
+            <code>km/h = belt length × revolutions ÷ seconds × 3.6</code>. Write
+            all eight values under <code>[treadmill.speed_kmh]</code>, then set
+            <code>calibrated = true</code> under <code>[treadmill]</code>.
+            Updating calibration recalculates historical estimates.
+          </div>
+        </section>
+        <section class="card panel wide">
+          <div class="panel-head">
+            <div>
+              <h2>Application settings</h2>
+              <p class="subtle">Managed on your server</p>
+            </div>
+          </div>
+          <div class="settings-list" id="application"></div>
+          <div class="info">
+            This page is read-only. Edit the TOML file on your server;
+            statistics and this page read changes on the next request. Restart
+            the server to change its listen address or database path. Calorie
+            reference:
+            <a
+              href="https://pacompendium.com/walking/"
+              target="_blank"
+              rel="noreferrer"
+              >2024 Adult Compendium, treadmill walking ↗</a
+            >.
+          </div>
+        </section>
+      </div>
+      <footer class="footer">
+        <span>tread · Make room for movement.</span
+        ><a href="/">Back to your overview ↗</a>
+      </footer>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

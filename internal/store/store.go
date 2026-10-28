@@ -31,6 +31,7 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		db.Close()
@@ -76,7 +77,7 @@ func (s *Store) AddEvents(events []event.Event) error {
 
 // Events returns events in [from, to), ordered by time.
 func (s *Store) Events(from, to time.Time) ([]event.Event, error) {
-	rows, err := s.db.Query(`SELECT id, device, action, value, ts FROM events WHERE ts >= ? AND ts < ? ORDER BY ts`,
+	rows, err := s.db.Query(`SELECT id, device, action, value, ts FROM events WHERE ts >= ? AND ts < ? ORDER BY ts, rowid`,
 		from.UnixMilli(), to.UnixMilli())
 	if err != nil {
 		return nil, err

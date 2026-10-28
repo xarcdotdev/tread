@@ -4,18 +4,17 @@ package ble
 import (
 	"fmt"
 
-	"github.com/xarcdotdev/oss-treadmill/internal/protocol"
 	"tinygo.org/x/bluetooth"
 )
 
 // Send connects to the device, writes one packet and disconnects.
 // On Linux, BlueZ must already know the device (pair or scan it once with bluetoothctl).
-func Send(mac string, packet []byte) error {
+func Send(mac, characteristic string, packet []byte) error {
 	addr, err := bluetooth.ParseMAC(mac)
 	if err != nil {
 		return fmt.Errorf("parse MAC: %w", err)
 	}
-	writeUUID, err := bluetooth.ParseUUID(protocol.WriteCharUUID)
+	writeUUID, err := bluetooth.ParseUUID(characteristic)
 	if err != nil {
 		return err
 	}
@@ -39,10 +38,10 @@ func Send(mac string, packet []byte) error {
 		if err != nil || len(chars) == 0 {
 			continue
 		}
-		if _, err := chars[0].WriteWithoutResponse(packet); err != nil {
+		if _, err := chars[0].Write(packet); err != nil {
 			return fmt.Errorf("write: %w", err)
 		}
 		return nil
 	}
-	return fmt.Errorf("characteristic %s not found", protocol.WriteCharUUID)
+	return fmt.Errorf("characteristic %s not found", characteristic)
 }

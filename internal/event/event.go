@@ -35,3 +35,25 @@ func newID() string {
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
 }
+
+func (e Event) Validate(now time.Time) error {
+	if e.ID == "" || len(e.ID) > 200 || e.Device == "" || len(e.Device) > 200 {
+		return fmt.Errorf("id and device are required and must be at most 200 characters")
+	}
+	if e.TS.Before(time.Unix(0, 0)) || e.TS.After(now.Add(time.Minute)) {
+		return fmt.Errorf("invalid event timestamp")
+	}
+	switch e.Action {
+	case Start, Stop, Pause:
+		if e.Value != 0 {
+			return fmt.Errorf("value is only allowed for speed")
+		}
+	case Speed:
+		if e.Value < 1 || e.Value > 8 {
+			return fmt.Errorf("speed must be 1–8")
+		}
+	default:
+		return fmt.Errorf("unknown action %q", e.Action)
+	}
+	return nil
+}

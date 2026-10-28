@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -31,14 +32,24 @@ func (c *Client) Report(e Event) error {
 		return err
 	}
 	events = append(events, e)
-	if c.ServerURL == "" {
-		return c.writeQueue(events)
+	if err = c.writeQueue(events); err != nil {
+		return err
 	}
-	if err := c.post(events); err != nil {
-		if qerr := c.writeQueue(events); qerr != nil {
-			return qerr
-		}
-		return fmt.Errorf("queued %d event(s): %w", len(events), err)
+	return c.Flush()
+}
+func (c *Client) Flush() error {
+	events, err := c.readQueue()
+	if err != nil {
+		return err
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	if c.ServerURL == "" {
+		return fmt.Errorf("%d event(s) queued; server_url is empty", len(events))
+	}
+	if err = c.post(events); err != nil {
+		return fmt.Errorf("%d event(s) queued: %w", len(events), err)
 	}
 	return c.writeQueue(nil)
 }
@@ -96,5 +107,24 @@ func (c *Client) writeQueue(events []Event) error {
 			return err
 		}
 	}
-	return os.WriteFile(c.QueuePath, buf.Bytes(), 0o600)
+	if err := os.MkdirAll(filepath.Dir(c.QueuePath), 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(c.QueuePath), ".queue-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(buf.Bytes()); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), c.QueuePath)
 }

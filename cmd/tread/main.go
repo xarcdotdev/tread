@@ -1,4 +1,4 @@
-// Command tread controls a DFT200 treadmill and tracks its usage.
+// Command tread controls a treadmill and tracks walking sessions.
 package main
 
 import (
@@ -8,147 +8,237 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/xarcdotdev/oss-treadmill/internal/ble"
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
+	"github.com/xarcdotdev/oss-treadmill/internal/demo"
+	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
-	"github.com/xarcdotdev/oss-treadmill/internal/protocol"
 	"github.com/xarcdotdev/oss-treadmill/internal/server"
 	"github.com/xarcdotdev/oss-treadmill/internal/stats"
 	"github.com/xarcdotdev/oss-treadmill/internal/store"
 )
 
-const usage = `usage: tread <command> [args]
+const usage = `usage: tread [-config path] <command> [options]
 
-control:
-  start            start or resume
-  pause            pause
-  stop             stop
-  speed <1-8>      set speed level
+  start | resume | pause | stop    Control the treadmill and report usage
+  speed <1-8>                     Set a speed level and report it
+  status                          Send the device status query (no telemetry decoding)
+  sync                            Retry queued usage events
+  stats [-period 1w] [-json]       Usage from server (also supports -days N)
+  config                          Show effective file-backed configuration
+  serve [-demo] [-listen addr]     Run SQLite event API and dashboard
+  help                            Show help
 
-tracking:
-  serve            run the event API and dashboard
-  stats [-days N]  show usage from the server
-
-config: ` + "~/.config/tread/config.toml"
+Periods: all, 3y, 1y, 3m, 1m, 1w, 1d
+Config: TREAD_CONFIG or ~/.config/tread/config.toml
+Demo uses an isolated in-memory SQLite database and never uses Bluetooth.`
 
 func main() {
 	log.SetFlags(0)
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, usage)
-		os.Exit(2)
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("config: %v", err)
-	}
-
-	cmd, args := os.Args[1], os.Args[2:]
-	switch cmd {
-	case "start":
-		err = control(cfg, event.Start, 0, protocol.Encode(protocol.CmdStart, 0))
-	case "pause":
-		err = control(cfg, event.Pause, 0, protocol.Encode(protocol.CmdPause, 0))
-	case "stop":
-		err = control(cfg, event.Stop, 0, protocol.Encode(protocol.CmdStop, 0))
-	case "speed":
-		err = speed(cfg, args)
-	case "serve":
-		err = serve(cfg)
-	case "stats":
-		err = showStats(cfg, args)
-	case "-h", "--help", "help":
-		fmt.Println(usage)
-	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s\n", cmd, usage)
-		os.Exit(2)
-	}
-	if err != nil {
+	if err := run(os.Args[1:]); err != nil && !errors.Is(err, flag.ErrHelp) {
 		log.Fatal(err)
 	}
 }
-
-func speed(cfg config.Config, args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: tread speed <1-8>")
-	}
-	level, err := strconv.Atoi(args[0])
-	if err != nil {
-		return fmt.Errorf("speed: %w", err)
-	}
-	packet, err := protocol.Speed(level)
-	if err != nil {
+func run(args []string) error {
+	root := flag.NewFlagSet("tread", flag.ContinueOnError)
+	path := root.String("config", "", "config file")
+	root.Usage = func() { fmt.Println(usage) }
+	if err := root.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
-	return control(cfg, event.Speed, level, packet)
+	args = root.Args()
+	if len(args) == 0 {
+		fmt.Println(usage)
+		return nil
+	}
+	cmd, args := args[0], args[1:]
+	if cmd == "help" {
+		fmt.Println(usage)
+		return nil
+	}
+	var cfg config.Config
+	var err error
+	if *path != "" {
+		cfg, err = config.LoadFile(*path)
+	} else {
+		cfg, err = config.Load()
+	}
+	if err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	switch cmd {
+	case "serve":
+		return serve(cfg, args)
+	case "stats":
+		return showStats(cfg, args)
+	case "config":
+		if len(args) > 0 {
+			return errors.New("usage: tread config")
+		}
+		return json.NewEncoder(os.Stdout).Encode(cfg)
+	case "sync":
+		if len(args) > 0 {
+			return errors.New("usage: tread sync")
+		}
+		return withLock(cfg, func() error { return event.NewClient(cfg.ServerURL, cfg.QueuePath()).Flush() })
+	case "start", "resume", "pause", "stop", "status", "speed":
+		level := 0
+		if cmd == "speed" {
+			if len(args) != 1 {
+				return errors.New("usage: tread speed <1-8>")
+			}
+			level, err = strconv.Atoi(args[0])
+			if err != nil {
+				return errors.New("speed must be 1–8")
+			}
+		} else if len(args) > 0 {
+			return fmt.Errorf("%s takes no arguments", cmd)
+		}
+		return control(cfg, cmd, level)
+	default:
+		return fmt.Errorf("unknown command %q; use tread help", cmd)
+	}
 }
 
-// control sends the packet, then reports the event. A failed report is only a warning:
-// the event stays queued and the treadmill has already been controlled.
-func control(cfg config.Config, action event.Action, value int, packet []byte) error {
-	if cfg.MAC == "" {
-		return errors.New("mac not set in config")
-	}
-	if err := ble.Send(cfg.MAC, packet); err != nil {
+// A file lock serializes separate CLI processes so simultaneous speed commands
+// cannot overwrite one another's offline events. This project targets Linux/BlueZ.
+func withLock(cfg config.Config, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(cfg.QueuePath()), 0o700); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+	f, err := os.OpenFile(cfg.QueuePath()+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
 		return err
 	}
-	client := event.NewClient(cfg.ServerURL, filepath.Join(config.Dir(), "queue.jsonl"))
-	if err := client.Report(event.New(cfg.Device, action, value)); err != nil {
-		log.Printf("warning: %v", err)
+	defer f.Close()
+	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return err
 	}
-	return nil
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return fn()
 }
-
-func serve(cfg config.Config) error {
-	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o700); err != nil {
+func control(cfg config.Config, action string, level int) error {
+	driver, err := device.Lookup(cfg.Treadmill.Driver)
+	if err != nil {
 		return err
 	}
-	st, err := store.Open(cfg.DBPath)
+	packet, err := driver.Packet(action, level)
+	if err != nil {
+		return err
+	}
+	if cfg.Treadmill.MAC == "" {
+		return errors.New("set treadmill.mac in config first")
+	}
+	return withLock(cfg, func() error {
+		if err := ble.Send(cfg.Treadmill.MAC, driver.WriteUUID(), packet); err != nil {
+			return err
+		}
+		if action == "status" {
+			fmt.Println("Status query sent. Device telemetry is not decoded.")
+			return nil
+		}
+		e := event.New(cfg.Device, event.Action(action), level)
+		if action == "resume" {
+			e.Action = event.Start
+		}
+		if err := event.NewClient(cfg.ServerURL, cfg.QueuePath()).Report(e); err != nil {
+			log.Printf("treadmill command sent; usage delivery: %v", err)
+		}
+		fmt.Printf("%s sent\n", action)
+		return nil
+	})
+}
+func serve(cfg config.Config, args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	mock := fs.Bool("demo", false, "isolated mock history")
+	listen := fs.String("listen", cfg.Listen, "listen address")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("unexpected serve arguments")
+	}
+	db := cfg.DBPath
+	if *mock {
+		cfg = demo.Config()
+		db = ":memory:"
+	} else if err := os.MkdirAll(filepath.Dir(db), 0o700); err != nil {
+		return err
+	}
+	st, err := store.Open(db)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
-	log.Printf("listening on %s, db %s", cfg.Listen, cfg.DBPath)
-	return http.ListenAndServe(cfg.Listen, server.New(st).Handler())
-}
-
-func showStats(cfg config.Config, args []string) error {
-	fs := flag.NewFlagSet("stats", flag.ExitOnError)
-	days := fs.Int("days", 7, "number of days")
-	fs.Parse(args)
-	if cfg.ServerURL == "" {
-		return errors.New("server_url not set in config")
+	if *mock {
+		if err := st.AddEvents(demo.Events(time.Now(), cfg.Location())); err != nil {
+			return err
+		}
+		log.Print("Demo mode: mock data, read-only API, isolated SQLite")
 	}
-
-	resp, err := http.Get(fmt.Sprintf("%s/api/stats?days=%d", cfg.ServerURL, *days))
+	log.Printf("Dashboard: http://%s", *listen)
+	srv := http.Server{Addr: *listen, Handler: server.New(st, cfg, *mock).Handler(), ReadHeaderTimeout: 5 * time.Second}
+	return srv.ListenAndServe()
+}
+func showStats(cfg config.Config, args []string) error {
+	fs := flag.NewFlagSet("stats", flag.ContinueOnError)
+	period := fs.String("period", "1w", "statistics period")
+	days := fs.Int("days", 0, "override with N days")
+	raw := fs.Bool("json", false, "print JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("unexpected stats arguments")
+	}
+	if _, err := stats.PeriodStart(*period, time.Now(), cfg.Location()); err != nil {
+		return err
+	}
+	query := "period=" + url.QueryEscape(*period)
+	if *days != 0 {
+		if *days < 1 {
+			return errors.New("days must be positive")
+		}
+		query = fmt.Sprintf("days=%d", *days)
+	}
+	client := http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(cfg.ServerURL + "/api/stats?" + query)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != 200 {
 		return fmt.Errorf("server: %s", resp.Status)
 	}
-	var body struct {
-		Days []stats.Day `json:"days"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	var r stats.Report
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
 		return err
 	}
-
-	var total time.Duration
-	var km float64
-	for _, d := range body.Days {
-		fmt.Printf("%s  %6s  %5.2f km\n", d.Date, d.Walking.Round(time.Minute), d.Distance)
-		total += d.Walking
-		km += d.Distance
+	if *raw {
+		return json.NewEncoder(os.Stdout).Encode(r)
 	}
-	fmt.Printf("total       %6s  %5.2f km\n", total.Round(time.Minute), km)
+	fmt.Printf("Walking     %.2f hours\n", r.Totals.Hours)
+	if r.DistanceAvailable {
+		fmt.Printf("Distance    %.2f km\nAvg. speed  %.2f km/h\n", r.Totals.DistanceKM, r.Totals.AverageSpeed)
+	}
+	if r.StepsAvailable {
+		fmt.Printf("Steps       %d (estimated)\n", r.Totals.Steps)
+	}
+	if r.CaloriesAvailable {
+		fmt.Printf("Calories    %.0f kcal (estimated)\n", r.Totals.Calories)
+	}
+	for _, w := range r.Warnings {
+		fmt.Println("Note:", w)
+	}
 	return nil
 }
