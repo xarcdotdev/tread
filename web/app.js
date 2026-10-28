@@ -328,6 +328,14 @@ async function load() {
     }
   }
 }
+async function loadGoalsPath() {
+  try {
+    const goals = await get("/api/goals");
+    $("goals-path").textContent = goals.path;
+  } catch (e) {
+    $("goals-path").textContent = `Unavailable: ${e.message}`;
+  }
+}
 async function init() {
   try {
     const { config: c, demo } = await get("/api/config");
@@ -340,6 +348,7 @@ async function init() {
       .forEach((el) => (el.hidden = !demo));
     if ($("personal")) {
       settings(c, demo);
+      await loadGoalsPath();
       return;
     }
     if (!["all", "3y", "1y", "3m", "1m", "1w", "1d"].includes(period))

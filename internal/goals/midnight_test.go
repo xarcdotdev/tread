@@ -98,6 +98,27 @@ func TestPeriodEndsAtMissingMidnight(t *testing.T) {
 	}
 }
 
+func TestGoalsFutureYearBoundary(t *testing.T) {
+	c := testConfig() // America/New_York, beyond explicit timezone transitions.
+	for _, date := range []string{"2040-12-31", "2041-01-01"} {
+		t.Run(date, func(t *testing.T) {
+			r := Build(nil, local(c, date+" 12:00"), c, Config{})
+			p := r.Periods[0]
+			if p.FromDate != date || p.ThroughDate != date || p.From.Hour() != 0 || p.To.Sub(p.From) != 24*time.Hour {
+				t.Fatal(p)
+			}
+			year := r.Periods[3]
+			want := "2041-01-01T00:00:00-05:00"
+			if date == "2041-01-01" {
+				want = "2042-01-01T00:00:00-05:00"
+			}
+			if year.To.Format(time.RFC3339) != want {
+				t.Fatal(year)
+			}
+		})
+	}
+}
+
 func TestGoalsAcrossMissingMidnight(t *testing.T) {
 	for _, tc := range []struct{ zone, start, stop string }{
 		{"America/Santiago", "2024-09-07 23:30", "2024-09-08 01:30"},

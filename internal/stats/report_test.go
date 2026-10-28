@@ -141,6 +141,34 @@ func TestRepeatedMidnightUsesFirstOccurrence(t *testing.T) {
 	}
 }
 
+func TestCalendarBoundaryFutureYearEnds(t *testing.T) {
+	for _, zone := range []string{
+		"America/New_York", "America/Santiago", "Africa/Cairo",
+		"Europe/London", "Europe/Berlin", "Australia/Sydney",
+		"Pacific/Auckland", "Asia/Tokyo", "UTC",
+	} {
+		t.Run(zone, func(t *testing.T) {
+			loc, err := time.LoadLocation(zone)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, year := range []int{2040, 2041, 2096, 2100, 2400} {
+				for _, date := range [][3]int{{year, 12, 30}, {year, 12, 31}, {year + 1, 1, 1}, {year + 1, 1, 2}} {
+					got := CalendarBoundary(date[0], time.Month(date[1]), date[2], loc)
+					// These zones have ordinary, unambiguous midnight on these dates.
+					want := time.Date(date[0], time.Month(date[1]), date[2], 0, 0, 0, 0, loc)
+					if !got.Equal(want) || got.Location() != loc {
+						t.Fatalf("boundary = %v, want %v", got, want)
+					}
+					if got.Add(-time.Nanosecond).In(loc).Format(time.DateOnly) == got.Format(time.DateOnly) {
+						t.Fatalf("not the first instant of the date: %v", got)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestCalendarMonthRange(t *testing.T) {
 	now := time.Date(2026, 3, 31, 12, 0, 0, 0, time.UTC)
 	got, err := PeriodStart("1m", now, time.UTC)

@@ -151,6 +151,32 @@
               >
             </div>
           </section>
+          <section class="card panel wide" aria-labelledby="goals-config-title">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="metric-icon tone-violet"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#trending-up" /></svg
+                ></span>
+                <h2 id="goals-config-title">Read-only goal configuration</h2>
+              </div>
+            </div>
+            <p>Goals file: <code id="goals-path">Loading…</code></p>
+            <p id="goals-edit-help">Copy <code>goals.example.yaml</code> to <code>goals.yaml</code> beside your server's <code>config.toml</code>. Edit it on the server, then <a href="/goals.html">Refresh</a>. Refresh also reloads the personal profile, timezone and speed calibration. No restart is needed.</p>
+            <p>All periods and targets are optional. Include only what you want to track. Targets must be positive: integer steps, kcal, Go duration strings such as <code>30m</code> or <code>1h30m</code>, and average speed in km/h.</p>
+            <pre aria-label="Example goals YAML"><code>daily:
+  steps: 6000
+  calories: 250
+  time: 30m
+  average_speed_kmh: 3.5
+weekly:
+  time: 5h
+monthly:
+  steps: 150000
+yearly:
+  time: 250h</code></pre>
+            <p>Walking time excludes pauses. Average speed is distance divided by walking hours, not an average of levels. Steps need step length or height; calories need weight. Missing speed calibration can make these estimates unavailable. Values above target stay visible; bars stop at 100%.</p>
+          </section>
           <section class="card panel wide">
             <div class="panel-head">
               <div class="panel-title">

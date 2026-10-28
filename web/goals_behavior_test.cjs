@@ -31,7 +31,7 @@ function descendants(element, tag) {
 }
 function harness() {
   const elements = Object.fromEntries([
-    "refresh", "goals-periods", "goals-status", "goals-path", "goals-calendar", "notices",
+    "refresh", "goals-periods", "goals-status", "goals-calendar", "notices",
   ].map((id) => [id, new Element()]));
   const device = new Element();
   const demo = new Element();
@@ -94,7 +94,7 @@ test("initial loading, accessible capped bars, unavailable metrics, placeholders
   assert.match(el["goals-periods"].textContent, /UnavailableTarget: 200 kcal\. Set weight <unsafe>\./);
   assert.match(el["goals-periods"].textContent, /No monthly targets configured/);
   assert.equal(el.notices.children.length, 1); // Deduplicate period warnings.
-  assert.equal(el["goals-path"].textContent, report().path);
+  assert.match(el["goals-periods"].textContent, /example on Configuration/);
   assert.equal(h.device.textContent, report().device);
 });
 
@@ -137,6 +137,7 @@ test("missing file shows four empty periods, not zero bars", async () => {
   assert.equal(h.elements["goals-periods"].children.length, 4);
   assert.equal(descendants(h.elements["goals-periods"], "progress").length, 0);
   assert.match(h.elements["goals-status"].textContent, /missing or empty goals.yaml/);
+  assert.match(h.elements["goals-status"].textContent, /See Configuration for the file path and example/);
 });
 
 test("calendar ranges use inclusive local dates across a DST boundary", async () => {

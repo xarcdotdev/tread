@@ -51,6 +51,13 @@ func CalendarBoundary(year int, month time.Month, day int, loc *time.Location) t
 	for cursor := civil.Add(-48 * time.Hour).In(loc); ; {
 		_, offset := cursor.Zone()
 		_, end := cursor.ZoneBounds()
+		if !end.IsZero() && !end.After(cursor) {
+			// Go's POSIX-rule extrapolation can report Jan 1 + 365 days
+			// as the end of the year's final zone, even in a leap year.
+			// Repair that synthetic bound to the actual UTC year end.
+			// Keep cursor unchanged so a boundary within Dec 31 is not lost.
+			end = time.Date(cursor.UTC().Year()+1, 1, 1, 0, 0, 0, 0, time.UTC).In(loc)
+		}
 		candidate := civil.Add(-time.Duration(offset) * time.Second).In(loc)
 		if candidate.Before(cursor) {
 			candidate = cursor

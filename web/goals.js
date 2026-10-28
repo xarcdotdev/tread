@@ -68,7 +68,6 @@ function goalMetric(period, metric) {
 }
 function renderGoals(report) {
   const byID = (id) => document.getElementById(id);
-  byID("goals-path").textContent = report.path;
   byID("goals-calendar").textContent = `Calendar days, Monday-start weeks, months and years in ${report.timezone}. Progress counts walking through now. Unlike the overview, these are not rolling windows.`;
   document.querySelectorAll("[data-device]").forEach((el) => (el.textContent = report.device));
   document.querySelectorAll("[data-demo]").forEach((el) => (el.hidden = !report.demo));
@@ -84,7 +83,7 @@ function renderGoals(report) {
     // The server supplies the first and last included calendar dates.
     card.append(title, goalElement("p", `${goalDate(period.from_date)} – ${goalDate(period.through_date)}`, "goal-range"));
     if (!period.metrics.length) {
-      card.append(goalElement("p", `No ${period.id} targets configured. Add a ${period.id}: section to goals.yaml using the example below, then Refresh.`, "goal-placeholder"));
+      card.append(goalElement("p", `No ${period.id} targets configured. Add a ${period.id}: section to goals.yaml using the example on Configuration, then Refresh.`, "goal-placeholder"));
     } else {
       configured = true;
       for (const metric of period.metrics) card.append(goalMetric(period, metric));
@@ -96,7 +95,7 @@ function renderGoals(report) {
     byID("notices").append(goalElement("div", warning, "notice"));
   byID("goals-status").textContent = configured
     ? ""
-    : "No goals configured. A missing or empty goals.yaml is fine. Copy the example below to the displayed path and set your targets.";
+    : "No goals configured. A missing or empty goals.yaml is fine. See Configuration for the file path and example, then set your targets.";
 }
 async function loadGoals() {
   const byID = (id) => document.getElementById(id);
@@ -108,7 +107,6 @@ async function loadGoals() {
   byID("goals-periods").replaceChildren();
   byID("goals-periods").setAttribute("aria-busy", "true");
   byID("notices").replaceChildren();
-  byID("goals-path").textContent = "Loading…";
   byID("goals-status").textContent = "Loading goals…";
   try {
     const response = await fetch("/api/goals", { cache: "no-store" });
@@ -119,7 +117,6 @@ async function loadGoals() {
     // A bad edit must not leave old bars or display misleading zero completion.
     byID("goals-periods").replaceChildren();
     byID("notices").replaceChildren(goalElement("div", `Could not load goals: ${error.message}`, "notice error"));
-    byID("goals-path").textContent = "Unavailable; see error above";
     byID("goals-status").textContent = "Progress is unavailable. Fix the file on the server, then Refresh.";
   } finally {
     delete refresh.dataset.loading;

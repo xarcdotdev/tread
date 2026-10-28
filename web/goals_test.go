@@ -46,9 +46,14 @@ func TestGoalsNavigationAndAssets(t *testing.T) {
 		}
 	}
 	html, _ := FS.ReadFile("goals.html")
-	for _, text := range []string{`src="/goals.js"`, `href="/style.css"`, `aria-label="Calendar goals"`, `aria-live="polite"`, `role="status"`, `aria-busy="true"`, "Read-only", "Monday-start", "Refresh"} {
+	for _, text := range []string{`src="/goals.js"`, `href="/style.css"`, `aria-label="Calendar goals"`, `aria-live="polite"`, `role="status"`, `aria-busy="true"`, "Monday-start", "Refresh"} {
 		if !strings.Contains(string(html), text) {
 			t.Errorf("goals page missing %q", text)
+		}
+	}
+	for _, text := range []string{"goals-config", "goals-path", "goals-edit-help", "Read-only goal configuration", "Example goals YAML"} {
+		if strings.Contains(string(html), text) {
+			t.Errorf("goals page still contains configuration card content %q", text)
 		}
 	}
 	if strings.Contains(string(html), `src="/app.js"`) {
@@ -67,9 +72,9 @@ func TestGoalsExampleMatchesFile(t *testing.T) {
 			lines = append(lines, line)
 		}
 	}
-	html, _ := FS.ReadFile("goals.html")
+	html, _ := FS.ReadFile("settings.html")
 	if !strings.Contains(string(html), strings.Join(lines, "\n")) {
-		t.Fatal("goals page example differs from goals.example.yaml")
+		t.Fatal("configuration page example differs from goals.example.yaml")
 	}
 }
 
