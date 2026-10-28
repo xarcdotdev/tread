@@ -29,6 +29,7 @@ type Treadmill struct {
 	InitialLevel             int                `toml:"initial_level" json:"initial_level"`
 	SpeedKMH                 map[string]float64 `toml:"speed_kmh" json:"speed_kmh"`
 	Calibrated               bool               `toml:"calibrated" json:"calibrated"`
+	IdleDisconnectTimeout    string             `toml:"idle_disconnect_timeout" json:"idle_disconnect_timeout"`
 	ExperimentalVANTelemetry bool               `toml:"experimental_van_telemetry" json:"experimental_van_telemetry"`
 }
 type Config struct {
@@ -51,7 +52,7 @@ func Dir() string {
 	return filepath.Join(d, "tread")
 }
 func Default() Config {
-	return Config{Device: "dft200", Listen: "127.0.0.1:18743", ServerURL: "http://127.0.0.1:18743", DBPath: filepath.Join(Dir(), "tread.db"), Timezone: "UTC", Treadmill: Treadmill{Driver: "dft200", Name: "Sportstech DFT200", InitialLevel: 1, SpeedKMH: map[string]float64{}}}
+	return Config{Device: "dft200", Listen: "127.0.0.1:18743", ServerURL: "http://127.0.0.1:18743", DBPath: filepath.Join(Dir(), "tread.db"), Timezone: "UTC", Treadmill: Treadmill{IdleDisconnectTimeout: "5m", Driver: "dft200", Name: "Sportstech DFT200", InitialLevel: 1, SpeedKMH: map[string]float64{}}}
 }
 func Load() (Config, error) {
 	path := os.Getenv("TREAD_CONFIG")
@@ -77,7 +78,23 @@ func LoadFile(path string) (Config, error) {
 }
 func (c Config) Validate() error { return c.validate(time.Now()) }
 
+// IdleDisconnectDuration also supplies the default for programmatically built configs.
+func (t Treadmill) IdleDisconnectDuration() (time.Duration, error) {
+	value := t.IdleDisconnectTimeout
+	if value == "" {
+		value = "5m"
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("treadmill.idle_disconnect_timeout must be a nonnegative duration: %q", value)
+	}
+	return d, nil
+}
+
 func (c Config) validate(now time.Time) error {
+	if _, err := c.Treadmill.IdleDisconnectDuration(); err != nil {
+		return err
+	}
 	loc, err := time.LoadLocation(c.Timezone)
 	if err != nil {
 		return fmt.Errorf("timezone: %w", err)

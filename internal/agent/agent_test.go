@@ -44,10 +44,11 @@ func (b *fakeBackend) latest() *fakeConnection {
 }
 
 type fakeConnection struct {
-	mu                    sync.Mutex
-	connected             bool
-	writes, subscriptions int
-	entered, release      chan struct{}
+	mu                                   sync.Mutex
+	connected                            bool
+	writes, subscriptions                int
+	entered, release                     chan struct{}
+	disconnectEntered, disconnectRelease chan struct{}
 }
 
 func (*fakeConnection) Discover([]string) error { return nil }
@@ -76,8 +77,13 @@ func (c *fakeConnection) Connected() (bool, error) {
 }
 func (c *fakeConnection) Disconnect() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.connected = false
+	entered, release := c.disconnectEntered, c.disconnectRelease
+	c.mu.Unlock()
+	if entered != nil {
+		close(entered)
+		<-release
+	}
 	return nil
 }
 func (c *fakeConnection) counts() (int, int) {

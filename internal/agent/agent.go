@@ -37,6 +37,9 @@ type host struct {
 	stopping, busy bool
 	active         *ble.Session
 	connectWait    time.Duration
+	idleTimeout    time.Duration
+	suspended      bool
+	wake           chan struct{}
 	work           sync.WaitGroup
 	store          *observed.Store
 	cfg            config.Config
@@ -79,7 +82,8 @@ func Run(ctx context.Context, cfg config.Config, opts Options) error {
 		return err
 	}
 	defer cleanup()
-	h := &host{ctx: ctx, cfg: cfg, connectWait: opts.ConnectWait, store: observed.NewStore(cfg.Device, device.CapabilitiesFor(driver), observed.StoreOptions{})}
+	idleTimeout, _ := cfg.Treadmill.IdleDisconnectDuration() // validated above; retained for runtime
+	h := &host{ctx: ctx, cfg: cfg, connectWait: opts.ConnectWait, idleTimeout: idleTimeout, wake: make(chan struct{}, 1), store: observed.NewStore(cfg.Device, device.CapabilitiesFor(driver), observed.StoreOptions{})}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	server := &http.Server{Handler: http.HandlerFunc(h.handle), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 4096}
@@ -148,6 +152,17 @@ func listen(dir string) (*net.UnixListener, func(), error) {
 
 func (h *host) connections(ctx context.Context, driver device.Driver, opts Options) {
 	for ctx.Err() == nil {
+		h.mu.Lock()
+		suspended := h.suspended
+		h.mu.Unlock()
+		if suspended {
+			select {
+			case <-ctx.Done():
+				return
+			case <-h.wake:
+				continue
+			}
+		}
 		generation := h.store.BeginConnection()
 		var telemetry device.TelemetrySession
 		var err error
@@ -191,25 +206,29 @@ func (h *host) connections(ctx context.Context, driver device.Driver, opts Optio
 func (h *host) connection(ctx context.Context, session *ble.Session, telemetry device.TelemetrySession, generation uint64) error {
 	protocolCtx, cancel := context.WithCancel(ctx)
 	finished := make(chan error, 1)
-	ready := func() {
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if !h.stopping && protocolCtx.Err() == nil && session.Err() == nil {
+	var idle idleReadings
+	closing := false  // guarded by h.mu, including callbacks during cleanup
+	ready := func() { // caller holds h.mu
+		if !closing && !h.stopping && protocolCtx.Err() == nil && session.Err() == nil && h.store.SetConnection(generation, observed.ConnectionConnected) {
 			h.active = session
-			h.store.SetConnection(generation, observed.ConnectionConnected)
 		}
 	}
 	if telemetry == nil {
+		h.mu.Lock()
 		ready()
+		h.mu.Unlock()
 	} else {
 		go func() {
 			finished <- telemetry.Run(protocolCtx, session, session.Notifications(), func(update observed.Update) {
 				// Capabilities are emitted after the driver's handshake. Readings also
 				// establish readiness for providers without a capability handshake.
-				if session.Err() != nil || protocolCtx.Err() != nil {
+				h.mu.Lock()
+				defer h.mu.Unlock()
+				if closing || h.stopping || session.Err() != nil || protocolCtx.Err() != nil {
 					return
 				}
 				if h.store.Apply(generation, update) {
+					idle.update(time.Now(), update)
 					if update.Capabilities != nil || update.State != nil || len(update.Measurements) > 0 {
 						ready()
 					}
@@ -241,9 +260,22 @@ wait:
 			if err = session.Err(); err != nil {
 				break wait
 			}
+			h.mu.Lock()
+			if idle.expired(time.Now(), h.idleTimeout) && !h.busy && !h.stopping && h.active == session {
+				closing = true
+				h.active = nil
+				h.suspended = true
+				h.store.SetConnection(generation, observed.ConnectionDisconnected)
+			}
+			idleClose := closing
+			h.mu.Unlock()
+			if idleClose {
+				break wait
+			}
 		}
 	}
 	h.mu.Lock()
+	closing = true
 	if h.active == session {
 		h.active = nil
 	}
@@ -258,19 +290,30 @@ wait:
 }
 
 // waitActive returns the live session, waiting up to connectWait for one.
-func (h *host) waitActive() *ble.Session {
-	deadline := time.Now().Add(h.connectWait)
+func (h *host) waitActive(ctx context.Context) *ble.Session {
+	timer := time.NewTimer(h.connectWait)
+	defer timer.Stop()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		h.mu.Lock()
 		session, stopping := h.active, h.stopping
 		h.mu.Unlock()
-		if stopping {
+		if stopping || h.ctx.Err() != nil || ctx.Err() != nil {
 			return nil
 		}
-		if session != nil || !time.Now().Before(deadline) {
+		if session != nil {
 			return session
 		}
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-h.ctx.Done():
+			return nil
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			return nil
+		case <-ticker.C:
+		}
 	}
 }
 

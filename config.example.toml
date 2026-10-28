@@ -24,6 +24,8 @@ calibrated = false
 # Opt in to experimental VAN telemetry when supported by the driver.
 # Live Bluetooth-host readings only; does not change calibration or history.
 experimental_van_telemetry = false
+# Disconnect after continuous fresh paused + zero-speed telemetry. 0s disables.
+idle_disconnect_timeout = "5m"
 
 [treadmill.speed_kmh]
 # Measure every level, then uncomment and fill in REAL values.

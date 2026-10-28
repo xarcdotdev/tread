@@ -9,6 +9,39 @@ import (
 	"time"
 )
 
+func TestIdleDisconnectTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  time.Duration
+		valid bool
+	}{
+		{"", 5 * time.Minute, true},
+		{"5m", 5 * time.Minute, true},
+		{"0s", 0, true},
+		{"250ms", 250 * time.Millisecond, true},
+		{"-1s", 0, false},
+		{"later", 0, false},
+	} {
+		cfg := Default()
+		cfg.Treadmill.IdleDisconnectTimeout = tc.value
+		duration, err := cfg.Treadmill.IdleDisconnectDuration()
+		if (err == nil) != tc.valid || (tc.valid && duration != tc.want) {
+			t.Errorf("%q: %v, %v", tc.value, duration, err)
+		}
+		if (cfg.Validate() == nil) != tc.valid {
+			t.Errorf("validation accepted %q", tc.value)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[treadmill]\nidle_disconnect_timeout = \"0s\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil || cfg.Treadmill.IdleDisconnectTimeout != "0s" {
+		t.Fatalf("load: %+v, %v", cfg.Treadmill, err)
+	}
+}
+
 func TestExperimentalVANTelemetry(t *testing.T) {
 	if Default().Treadmill.ExperimentalVANTelemetry {
 		t.Fatal("experimental telemetry must default off")

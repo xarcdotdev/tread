@@ -89,6 +89,10 @@ The agent's lock and socket live in a runtime directory: `TREAD_RUNTIME_DIR` if 
 
 Telemetry is off by default. `experimental_van_telemetry = true` enables the decoder recovered from the VAN FIT app (`docs/van-fit-protocol.md`). It works on a DFT200 but remains experimental. With the default unit byte, speed and distance are labelled km/h and km as inferred units: the treadmill's nominal speed, not your calibrated belt speed. The two will disagree.
 
+Under `[treadmill]`, `idle_disconnect_timeout = "5m"` disconnects the agent after five minutes of continuously fresh paused state and zero reported speed. Set `"0s"` to disable; restart the agent after changing it. Missing, unknown, running, nonzero or stale readings reset the timer. Without telemetry, there is no automatic disconnect. The decoder recognizes paused state, not a generic stopped state.
+
+The next Bluetooth command, including `status`, reconnects before being sent once. `observed`, dashboard polling, `sync` and `reset-state` do not reconnect. While disconnected, the agent cannot see or wake for activity from the physical remote.
+
 ### Hyprland startup
 
 The CLI does not start the server implicitly. On the configured workstation below, the treadmill control wrapper starts or reuses the agent and server user services on the first control-key press; there is no startup at login. The wrapper then sends the requested movement command once, even if the server is unavailable, so offline usage can still queue. A brief readiness check does not retry the command. Normal Hyprland logout stops both services; crashes or forced termination may not. For manual control, use `systemctl --user stop tread.service tread-agent.service`; inspect logs with `journalctl --user -u tread-agent.service -u tread.service`.

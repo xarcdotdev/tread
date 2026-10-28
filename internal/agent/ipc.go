@@ -114,7 +114,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.mu.Lock()
-	if h.stopping || h.ctx.Err() != nil {
+	if h.stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
 		h.mu.Unlock()
 		fail(503, "agent stopping")
 		return
@@ -127,6 +127,13 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 	session := h.active
 	if command {
 		h.busy = true
+		if req.Action != "reset-state" && h.suspended {
+			h.suspended = false
+			select {
+			case h.wake <- struct{}{}:
+			default:
+			}
+		}
 	}
 	h.work.Add(1)
 	h.mu.Unlock()
@@ -139,7 +146,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 		h.work.Done()
 	}()
 	if command && session == nil && req.Action != "reset-state" {
-		if session = h.waitActive(); session == nil {
+		if session = h.waitActive(r.Context()); session == nil {
 			fail(503, "device unavailable; no command sent")
 			return
 		}
@@ -161,6 +168,13 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 	level := 0
 	if req.Level != nil {
 		level = *req.Level
+	}
+	h.mu.Lock()
+	stopping := h.stopping
+	h.mu.Unlock()
+	if stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
+		fail(503, "request canceled; no command sent")
+		return
 	}
 	result, err := service.Execute(req.Action, level)
 	out := CommandResponse{Result: result.Result, DeliveryPending: result.DeliveryPending, DeliveryMessage: result.DeliveryMessage}
