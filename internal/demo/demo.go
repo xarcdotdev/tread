@@ -12,7 +12,7 @@ import (
 
 func Config() config.Config {
 	c := config.Default()
-	c.Personal = config.Personal{WeightKG: 75, Age: 32, HeightCM: 178, Gender: "male", StepLengthM: 0.74}
+	c.Personal = config.Personal{WeightKG: 75, Birthdate: "1994-01-01", HeightCM: 178, Gender: "male", StepLengthM: 0.74}
 	c.Treadmill.Calibrated = true
 	c.Path = "Demo settings (in memory)"
 	for n := 1; n <= 8; n++ {

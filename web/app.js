@@ -70,13 +70,14 @@ function fields(id, values) {
     )
     .join("");
 }
-function settings(c, demo) {
+function settings(c, demo, age = null) {
   const p = c.personal,
     t = c.treadmill;
   fields("personal", [
     ["Weight", p.weight_kg ? `${p.weight_kg} kg` : "Not set"],
     ["Height", p.height_cm ? `${p.height_cm} cm` : "Not set"],
-    ["Age", p.age ? `${p.age} years` : "Not set"],
+    ["Birthdate", p.birthdate || "Not set"],
+    ["Age", age !== null ? `${age} years` : "Not set"],
     ["Gender", p.gender || "Not set"],
     [
       "Step length",
@@ -88,7 +89,8 @@ function settings(c, demo) {
     ],
     [
       "Calorie model",
-      p.age && p.height_cm && ["male", "female"].includes(p.gender)
+      age > 0 && p.weight_kg > 0 && p.height_cm > 0 &&
+      ["male", "female"].includes(p.gender)
         ? "MET × personalized resting energy"
         : "MET × weight × hours",
     ],
@@ -338,7 +340,7 @@ async function loadGoalsPath() {
 }
 async function init() {
   try {
-    const { config: c, demo } = await get("/api/config");
+    const { config: c, demo, age } = await get("/api/config");
     configuration = c;
     document
       .querySelectorAll("[data-device]")
@@ -347,7 +349,7 @@ async function init() {
       .querySelectorAll("[data-demo]")
       .forEach((el) => (el.hidden = !demo));
     if ($("personal")) {
-      settings(c, demo);
+      settings(c, demo, age);
       await loadGoalsPath();
       return;
     }

@@ -51,7 +51,7 @@ func TestReportSeparatesDevicesAndHandlesMissingCalibration(t *testing.T) {
 func TestReportSpeedChangesAndPause(t *testing.T) {
 	cfg := config.Default()
 	cfg.Treadmill.SpeedKMH = map[string]float64{"1": 2, "2": 4}
-	cfg.Personal = config.Personal{WeightKG: 80, HeightCM: 180, Age: 40, Gender: "male", StepLengthM: .75}
+	cfg.Personal = config.Personal{WeightKG: 80, HeightCM: 180, Birthdate: "1986-10-27", Gender: "male", StepLengthM: .75}
 	events := []event.Event{ev(0, event.Start, 0), ev(15, event.Speed, 2), ev(30, event.Pause, 0), ev(32, event.Start, 0), ev(47, event.Stop, 0)}
 	r := Build(events, t0.Add(time.Hour), t0, "1d", cfg)
 	if r.Totals.Hours != .75 || r.Totals.DistanceKM != 2.5 || math.Abs(r.Totals.AverageSpeed-10./3) > 1e-9 {
@@ -64,6 +64,81 @@ func TestReportSpeedChangesAndPause(t *testing.T) {
 		t.Fatalf("calories = %v, want %v", r.Totals.Calories, want)
 	}
 }
+func TestRestingBirthdateAndFallback(t *testing.T) {
+	now := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
+	full := config.Personal{WeightKG: 80, HeightCM: 180, Birthdate: "1986-10-27", Gender: "male"}
+	for _, tc := range []struct {
+		name   string
+		change func(*config.Personal)
+		want   float64
+	}{
+		{"male", func(p *config.Personal) {}, 1730. / 24},
+		{"female", func(p *config.Personal) { p.Gender = "female" }, 1564. / 24},
+		{"missing birthdate", func(p *config.Personal) { p.Birthdate = "" }, 80},
+		{"invalid birthdate", func(p *config.Personal) { p.Birthdate = "1986-02-30" }, 80},
+		{"wrong format", func(p *config.Personal) { p.Birthdate = "1986-1-1" }, 80},
+		{"zero birthdate", func(p *config.Personal) { p.Birthdate = "0000-00-00" }, 80},
+		{"future birthdate", func(p *config.Personal) { p.Birthdate = "2026-10-28" }, 80},
+		{"too old", func(p *config.Personal) { p.Birthdate = "1905-10-27" }, 80},
+		{"zero age", func(p *config.Personal) { p.Birthdate = "2026-10-27" }, 80},
+		{"missing height", func(p *config.Personal) { p.HeightCM = 0 }, 80},
+		{"missing gender", func(p *config.Personal) { p.Gender = "" }, 80},
+		{"other gender", func(p *config.Personal) { p.Gender = "other" }, 80},
+		{"missing weight", func(p *config.Personal) { p.WeightKG = 0 }, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := full
+			tc.change(&p)
+			if got := resting(p, now); math.Abs(got-tc.want) > 1e-9 {
+				t.Fatalf("resting = %v, want %v", got, tc.want)
+			}
+			cfg := config.Default()
+			cfg.Personal = p
+			cfg.Treadmill.SpeedKMH = map[string]float64{"1": 2}
+			events := []event.Event{{Action: event.Start, TS: now.Add(-time.Hour)}, {Action: event.Stop, TS: now}}
+			r := Build(events, now, now.Add(-time.Hour), "all", cfg)
+			if math.Abs(r.Totals.Calories-2.8*tc.want) > 1e-9 || r.CaloriesAvailable != (tc.want > 0) {
+				t.Fatalf("wrong calorie estimate or availability: %+v", r)
+			}
+		})
+	}
+}
+
+func TestReportUsesReferenceDateAgeForEntireHistory(t *testing.T) {
+	start := time.Date(2020, 1, 1, 9, 0, 0, 0, time.UTC)
+	events := []event.Event{{Action: event.Start, TS: start}, {Action: event.Stop, TS: start.Add(time.Hour)}}
+	for _, tc := range []struct {
+		name, birthdate, now, zone string
+		age                        int
+	}{
+		{"before birthday", "1990-06-15", "2024-06-14T12:00:00Z", "UTC", 33},
+		{"on birthday", "1990-06-15", "2024-06-15T00:00:00Z", "UTC", 34},
+		{"after birthday", "1990-06-15", "2024-06-16T00:00:00Z", "UTC", 34},
+		{"local previous date", "1990-06-15", "2024-06-15T00:30:00Z", "America/Los_Angeles", 33},
+		{"local next date", "1990-06-15", "2024-06-14T23:30:00Z", "Europe/Berlin", 34},
+		{"year boundary", "1990-12-31", "2024-01-01T00:00:00Z", "UTC", 33},
+		{"before leap birthday", "2000-02-29", "2023-02-28T12:00:00Z", "UTC", 22},
+		{"non-leap birthday", "2000-02-29", "2023-03-01T00:00:00Z", "UTC", 23},
+		{"leap birthday", "2000-02-29", "2024-02-29T00:00:00Z", "UTC", 24},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Timezone = tc.zone
+			cfg.Personal = config.Personal{WeightKG: 80, HeightCM: 180, Birthdate: tc.birthdate, Gender: "male"}
+			cfg.Treadmill.SpeedKMH = map[string]float64{"1": 2}
+			now, err := time.Parse(time.RFC3339, tc.now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := Build(events, now, start, "all", cfg)
+			want := 2.8 * (10*80 + 6.25*180 - 5*float64(tc.age) + 5) / 24
+			if math.Abs(r.Totals.Calories-want) > 1e-9 || math.Abs(r.Days[0].Calories-want) > 1e-9 {
+				t.Fatalf("history calories = %v, want %v using age %d on report date", r.Totals.Calories, want, tc.age)
+			}
+		})
+	}
+}
+
 func TestDaylightSavingWalkingDuration(t *testing.T) {
 	cfg := config.Default()
 	cfg.Timezone = "Europe/Berlin"

@@ -13,7 +13,7 @@ class Element {
     this.classList.remove = this.classList.delete;
   }
 }
-function harness(overview = false) {
+function harness(overview = false, browserTimezone = "UTC") {
   const ids = overview
     ? ["notices", "today", "refresh", "activity-chart"]
     : ["notices", "personal", "device", "application", "calibration-state", "calibration", "goals-path"];
@@ -36,6 +36,17 @@ function harness(overview = false) {
     },
     location: { search: "" },
     URLSearchParams,
+    Date: class extends Date {
+      constructor(...args) { super(...(args.length ? args : ["2026-06-15T00:30:00Z"])); }
+    },
+    Intl: {
+      DateTimeFormat: class extends Intl.DateTimeFormat {
+        constructor(locale, options) {
+          super(locale, { ...options, timeZone: options?.timeZone ?? browserTimezone });
+        }
+      },
+      NumberFormat: Intl.NumberFormat,
+    },
     ResizeObserver: class { observe() {} },
     fetch: (url) => new Promise((resolve, reject) => pending.push({ url, resolve, reject })),
   });
@@ -47,8 +58,9 @@ const response = (value) => ({ ok: true, json: async () => value });
 function configuration(demo = false) {
   return {
     demo,
+    age: 36,
     config: {
-      personal: { weight_kg: 75, height_cm: 180, age: 30, gender: "male" },
+      personal: { weight_kg: 75, height_cm: 180, birthdate: "1990-06-15", gender: "male" },
       treadmill: {
         name: "Test treadmill", driver: "mock", initial_level: 1,
         calibrated: true, speed_kmh: { 1: 1.5, 2: 2 },
@@ -60,6 +72,10 @@ function configuration(demo = false) {
 }
 function assertSettings(h) {
   assert.match(h.elements.personal.innerHTML, /75 kg/);
+  assert.match(h.elements.personal.innerHTML, /Birthdate/);
+  assert.match(h.elements.personal.innerHTML, /1990-06-15/);
+  assert.match(h.elements.personal.innerHTML, /36 years/);
+  assert.match(h.elements.personal.innerHTML, /MET × personalized resting energy/);
   assert.match(h.elements.device.innerHTML, /Test treadmill/);
   assert.match(h.elements.application.innerHTML, /\/server\/config.toml/);
   assert.match(h.elements.calibration.innerHTML, /1.50 km\/h/);
@@ -120,6 +136,67 @@ test("configuration failures retain their own error without requesting goals", a
   assert.match(h.elements.notices.innerHTML, /Could not load configuration: invalid TOML/);
   assert.equal(h.pending.length, 0);
 });
+
+for (const age of [null, undefined]) {
+  test(`unavailable server age uses the unset and basic calorie fallbacks: ${age}`, async () => {
+    const h = harness();
+    const value = configuration();
+    value.age = age;
+    value.config.personal.age = 36; // A legacy value must not be used as a fallback.
+    h.pending.shift().resolve(response(value));
+    await settle();
+    assert.match(h.elements.personal.innerHTML, /Age<\/span><span class="field-value unset">Not set/);
+    assert.match(h.elements.personal.innerHTML, /1990-06-15/);
+    assert.match(h.elements.personal.innerHTML, /MET × weight × hours/);
+    assert.doesNotMatch(h.elements.personal.innerHTML, /personalized resting energy|36 years/);
+  });
+}
+
+test("zero server age is displayed without enabling personalized calories", async () => {
+  const h = harness();
+  const value = configuration();
+  value.age = 0;
+  value.config.personal.birthdate = "2026-06-15";
+  h.pending.shift().resolve(response(value));
+  await settle();
+  assert.match(h.elements.personal.innerHTML, /2026-06-15/);
+  assert.match(h.elements.personal.innerHTML, /Age<\/span><span class="field-value">0 years/);
+  assert.match(h.elements.personal.innerHTML, /MET × weight × hours/);
+  assert.doesNotMatch(h.elements.personal.innerHTML, /personalized resting energy/);
+});
+
+for (const change of [
+  { weight_kg: 0 }, { height_cm: 0 }, { gender: "" }, { gender: "other" },
+]) {
+  test(`incomplete calorie profile uses basic MET: ${JSON.stringify(change)}`, async () => {
+    const h = harness();
+    const value = configuration();
+    Object.assign(value.config.personal, change);
+    h.pending.shift().resolve(response(value));
+    await settle();
+    assert.match(h.elements.personal.innerHTML, /MET × weight × hours/);
+    assert.doesNotMatch(h.elements.personal.innerHTML, /personalized resting energy/);
+  });
+}
+
+for (const timezone of ["", "Local", "UTC"]) {
+  for (const browserTimezone of ["America/Los_Angeles", "Pacific/Kiritimati"]) {
+    test(`settings honors server age with timezone=${JSON.stringify(timezone)} and browser=${browserTimezone}`, async () => {
+      const h = harness(false, browserTimezone);
+      const value = configuration();
+      value.config.timezone = timezone;
+      value.age = 35;
+      h.pending.shift().resolve(response(value));
+      await settle();
+      assert.match(h.elements.personal.innerHTML, /1990-06-15/);
+      assert.match(h.elements.personal.innerHTML, /35 years/);
+      assert.match(h.elements.personal.innerHTML, /MET × personalized resting energy/);
+      assert.doesNotMatch(h.elements.personal.innerHTML, /36 years/);
+      assert.equal(h.elements.notices.innerHTML, "");
+      assert.equal(h.pending[0].url, "/api/goals");
+    });
+  }
+}
 
 test("overview keeps loading statistics without requesting goals", async () => {
   const h = harness(true);

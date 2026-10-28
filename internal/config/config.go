@@ -17,7 +17,7 @@ import (
 
 type Personal struct {
 	WeightKG    float64 `toml:"weight_kg" json:"weight_kg"`
-	Age         int     `toml:"age" json:"age"`
+	Birthdate   string  `toml:"birthdate" json:"birthdate"`
 	HeightCM    float64 `toml:"height_cm" json:"height_cm"`
 	Gender      string  `toml:"gender" json:"gender"`
 	StepLengthM float64 `toml:"step_length_m" json:"step_length_m"`
@@ -74,8 +74,11 @@ func LoadFile(path string) (Config, error) {
 	}
 	return c, c.Validate()
 }
-func (c Config) Validate() error {
-	if _, err := time.LoadLocation(c.Timezone); err != nil {
+func (c Config) Validate() error { return c.validate(time.Now()) }
+
+func (c Config) validate(now time.Time) error {
+	loc, err := time.LoadLocation(c.Timezone)
+	if err != nil {
 		return fmt.Errorf("timezone: %w", err)
 	}
 	if c.Treadmill.Driver != "dft200" {
@@ -97,7 +100,12 @@ func (c Config) Validate() error {
 		return errors.New("calibrated requires speed_kmh entries for all 8 levels")
 	}
 	p := c.Personal
-	if p.WeightKG < 0 || p.WeightKG > 500 || p.Age < 0 || p.Age > 120 || p.HeightCM < 0 || p.HeightCM > 250 || p.StepLengthM < 0 || p.StepLengthM > 2 {
+	if p.Birthdate != "" {
+		if _, err := p.ageAt(now.In(loc)); err != nil {
+			return fmt.Errorf("personal.birthdate: %w", err)
+		}
+	}
+	if p.WeightKG < 0 || p.WeightKG > 500 || p.HeightCM < 0 || p.HeightCM > 250 || p.StepLengthM < 0 || p.StepLengthM > 2 {
 		return errors.New("personal metrics out of range")
 	}
 	for _, v := range []float64{p.WeightKG, p.HeightCM, p.StepLengthM} {
@@ -113,5 +121,32 @@ func (c Config) Validate() error {
 	}
 	return nil
 }
+
+// AgeAt returns completed years on now's local calendar date. Missing or invalid
+// birthdates are unavailable. A Feb 29 birthday advances on March 1 in non-leap years.
+func (p Personal) AgeAt(now time.Time) (int, bool) {
+	age, err := p.ageAt(now)
+	return age, err == nil
+}
+
+func (p Personal) ageAt(now time.Time) (int, error) {
+	birth, err := time.Parse(time.DateOnly, p.Birthdate)
+	if err != nil || birth.Year() < 1 || birth.Format(time.DateOnly) != p.Birthdate {
+		return 0, errors.New("must be a calendar date in YYYY-MM-DD format")
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if birth.After(today) {
+		return 0, errors.New("must not be in the future")
+	}
+	age := now.Year() - birth.Year()
+	if now.Month() < birth.Month() || (now.Month() == birth.Month() && now.Day() < birth.Day()) {
+		age--
+	}
+	if age > 120 {
+		return 0, errors.New("age must not exceed 120 years")
+	}
+	return age, nil
+}
+
 func (c Config) Location() *time.Location { l, _ := time.LoadLocation(c.Timezone); return l }
 func (c Config) QueuePath() string        { return filepath.Join(filepath.Dir(c.Path), "queue.jsonl") }

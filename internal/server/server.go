@@ -42,11 +42,19 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		writeJSON(w, map[string]any{"config": c, "demo": s.demo, "read_only": true})
+		writeJSON(w, configResponse(c, s.demo, time.Now()))
 	})
 	mux.Handle("GET /", http.FileServerFS(web.FS))
 	return mux
 }
+func configResponse(c config.Config, demo bool, now time.Time) map[string]any {
+	var age *int
+	if years, ok := c.Personal.AgeAt(now.In(c.Location())); ok {
+		age = &years
+	}
+	return map[string]any{"config": c, "demo": demo, "read_only": true, "age": age}
+}
+
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

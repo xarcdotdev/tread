@@ -108,16 +108,17 @@ func met(kmh float64) float64 {
 
 // Resting kcal/hour: use Mifflin-St Jeor when the full profile is supplied,
 // otherwise use the conventional MET baseline of 1 kcal/kg/hour.
-func resting(p config.Personal) float64 {
+func resting(p config.Personal, now time.Time) float64 {
 	if p.WeightKG <= 0 {
 		return 0
 	}
-	if p.HeightCM > 0 && p.Age > 0 && (p.Gender == "male" || p.Gender == "female") {
+	age, valid := p.AgeAt(now)
+	if p.HeightCM > 0 && valid && age > 0 && (p.Gender == "male" || p.Gender == "female") {
 		offset := 5.
 		if p.Gender == "female" {
 			offset = -161
 		}
-		return math.Max(0, (10*p.WeightKG+6.25*p.HeightCM-5*float64(p.Age)+offset)/24)
+		return math.Max(0, (10*p.WeightKG+6.25*p.HeightCM-5*float64(age)+offset)/24)
 	}
 	return p.WeightKG
 }
@@ -138,7 +139,9 @@ func Build(events []event.Event, now, from time.Time, period string, cfg config.
 	if stepLength == 0 && cfg.Personal.HeightCM > 0 {
 		stepLength = cfg.Personal.HeightCM / 100 * 0.414
 	}
-	rest := resting(cfg.Personal)
+	// Use the report date's age for the entire history, like the current profile
+	// and calibration. Do not age the profile separately for each walking day.
+	rest := resting(cfg.Personal, now.In(cfg.Location()))
 	var steps float64
 	for _, es := range groups {
 		for _, s := range Sessions(es, now, opt) {

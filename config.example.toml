@@ -7,9 +7,9 @@ timezone = "Europe/Berlin"
 # db_path = "/home/you/.config/tread/tread.db"
 
 [personal]
-# Set your own values. Zero means unknown; unavailable estimates stay hidden.
+# Set your own values. Zero/empty means unknown; unavailable estimates stay hidden.
 weight_kg = 0
-age = 0
+birthdate = "" # Optional YYYY-MM-DD, e.g. "1990-06-15"; age updates on your birthday
 height_cm = 0
 gender = "" # male/female for Mifflin-St Jeor, or leave unspecified
 step_length_m = 0 # measured distance / number of steps; 0 uses height × 0.414
