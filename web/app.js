@@ -205,9 +205,6 @@ function drawChart() {
     `${monthly ? "Monthly" : "Daily"} ${unit}, ${entries.length} periods. Total ${available ? number(report.totals[metric], 1) : "unavailable"}.`,
   );
   $("chart-tooltip").hidden = true;
-  $("chart-subtitle").textContent = monthly
-    ? "Your monthly walking rhythm"
-    : "Your daily walking rhythm";
   document
     .querySelectorAll("[data-metric]")
     .forEach((b) =>
