@@ -3,178 +3,251 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="theme-color" content="#37684e" />
+    <meta name="theme-color" content="#7e43fe" />
     <title>Overview · tread</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body class="loading">
-    <header class="topbar">
-      <a class="brand" href="/"
-        ><span class="brand-mark">↗</span>tread<span style="color: #a5b297"
-          >.</span
-        ></a
-      >
-      <nav class="nav" aria-label="Main">
-        <a class="active" aria-current="page" href="/">Overview</a
-        ><a href="/settings.html">Configuration</a>
-      </nav>
-      <div class="status">
-        <span class="dot"></span
-        ><span class="device-name" data-device>Usage tracker</span
-        ><span class="demo-label" data-demo hidden>DEMO DATA</span>
-      </div>
-    </header>
-    <main>
-      <div class="eyebrow">A little movement, every day</div>
-      <div class="heading">
-        <div>
-          <h1>Your walking overview</h1>
-          <p>Small steps. A clearer picture of your progress.</p>
-        </div>
-        <span class="today" id="today"></span>
-      </div>
-      <div class="toolbar">
-        <div class="periods" aria-label="Statistics period">
-          <button data-period="all" aria-pressed="false">All time</button
-          ><button data-period="3y" aria-pressed="false">3 years</button
-          ><button data-period="1y" aria-pressed="false">1 year</button
-          ><button data-period="3m" aria-pressed="false">3 months</button
-          ><button data-period="1m" aria-pressed="true">1 month</button
-          ><button data-period="1w" aria-pressed="false">1 week</button
-          ><button data-period="1d" aria-pressed="false">1 day</button>
-        </div>
-        <span class="range" id="date-range"></span>
-      </div>
-      <div id="notices" aria-live="polite"></div>
-      <section class="cards" aria-label="Usage totals">
-        <article class="card metric">
-          <div class="metric-name">
-            <span class="metric-icon">◷</span>Time walking
-          </div>
-          <div class="metric-value">
-            <span id="hours">—</span><small>hrs</small>
-          </div>
-          <div class="metric-note" id="session-count">
-            Walking time, excluding pauses
-          </div>
-        </article>
-        <article class="card metric">
-          <div class="metric-name">
-            <span class="metric-icon">↟</span>Steps taken
-          </div>
-          <div class="metric-value">
-            <span id="steps">—</span><small>steps</small>
-          </div>
-          <div class="metric-note">
-            Estimated from distance &amp; step length
-          </div>
-        </article>
-        <article class="card metric">
-          <div class="metric-name">
-            <span class="metric-icon">↗</span>Average speed
-          </div>
-          <div class="metric-value">
-            <span id="speed">—</span><small>km/h</small>
-          </div>
-          <div class="metric-note">Weighted by time walking</div>
-        </article>
-        <article class="card metric">
-          <div class="metric-name">
-            <span class="metric-icon">♧</span>Calories burned
-          </div>
-          <div class="metric-value">
-            <span id="calories">—</span><small>kcal</small>
-          </div>
-          <div class="metric-note">Estimated total energy while walking</div>
-        </article>
-      </section>
-      <div class="chart-grid">
-        <section class="card panel">
-          <div class="panel-head">
-            <div>
-              <h2>Movement over time</h2>
-              <p class="subtle" id="chart-subtitle">
-                Your daily walking rhythm
-              </p>
-            </div>
-            <div class="chart-tools" aria-label="Graph metric">
-              <button data-metric="hours" aria-pressed="true">Time</button
-              ><button data-metric="distance_km" aria-pressed="false">
-                Distance</button
-              ><button data-metric="steps" aria-pressed="false">Steps</button>
-            </div>
-          </div>
-          <div class="chart-summary">
-            <div>
-              <strong id="chart-total">—</strong
-              ><span id="chart-unit">hours walked</span>
-            </div>
-            <div><strong id="distance">—</strong><span>km covered</span></div>
-          </div>
-          <svg
-            class="chart"
-            id="activity-chart"
-            viewBox="0 0 700 230"
-            role="img"
-            aria-label="Walking activity graph"
-          ></svg>
-          <p class="subtle" id="graph-hint">Hover a bar for details.</p>
-        </section>
-        <section class="card panel donut-panel">
-          <div class="panel-head">
-            <div>
-              <h2>Find your pace</h2>
-              <p class="subtle">Walking time by speed level</p>
-            </div>
-          </div>
-          <div class="donut-wrap">
-            <svg
-              viewBox="0 0 180 180"
-              id="pace-chart"
-              role="img"
-              aria-label="Walking time by speed level"
-            ></svg>
-            <div class="donut-label">
-              <strong id="pace-hours">—</strong><span>hours in motion</span>
-            </div>
-          </div>
-          <div class="legend" id="pace-legend"></div>
-        </section>
-      </div>
-      <section class="card sessions">
-        <div class="panel-head">
-          <div>
-            <h2>Recent sessions</h2>
-            <p class="subtle" id="sessions-note">
-              Your latest walks in this period
-            </p>
-          </div>
-          <button id="refresh">↻ Refresh</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date &amp; time</th>
-                <th>Duration</th>
-                <th>Distance</th>
-                <th>Avg. speed</th>
-                <th>Device</th>
-                <th>Activity</th>
-              </tr>
-            </thead>
-            <tbody id="sessions"></tbody>
-          </table>
-        </div>
-      </section>
-      <footer class="footer">
-        <span>tread · Make room for movement.</span
-        ><span
-          >Derived from sent commands · Steps &amp; calories are estimates ·
-          <a href="/settings.html">View configuration ↗</a></span
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="/"
+          ><span class="brand-mark"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#activity" /></svg></span
+          ><span>tread<b>.</b></span></a
         >
-      </footer>
-    </main>
+        <nav class="nav" aria-label="Main">
+          <div class="nav-label">Menu</div>
+          <a class="active" aria-current="page" href="/"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#layout-dashboard" /></svg
+            ><span>Overview</span></a
+          ><a href="/settings.html"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#sliders-horizontal" /></svg
+            ><span>Configuration</span></a
+          >
+        </nav>
+        <div class="device-card">
+          <span class="device-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#bluetooth" /></svg
+          ></span>
+          <div class="device-text">
+            <span>Treadmill</span><strong data-device>Usage tracker</strong>
+          </div>
+          <span class="demo-label" data-demo hidden>Demo</span>
+        </div>
+      </aside>
+      <main>
+        <header class="page-head">
+          <div>
+            <p class="eyebrow">A little movement, every day</p>
+            <h1>Your walking overview</h1>
+            <p>Small steps. A clearer picture of your progress.</p>
+          </div>
+          <div class="head-actions">
+            <span class="chip"
+              ><svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#calendar-days" /></svg
+              ><span id="today"></span
+            ></span>
+            <button class="btn" id="refresh">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#refresh-cw" /></svg
+              >Refresh
+            </button>
+          </div>
+        </header>
+        <div class="toolbar">
+          <div class="segmented periods" aria-label="Statistics period">
+            <button data-period="all" aria-pressed="false">All time</button
+            ><button data-period="3y" aria-pressed="false">3 years</button
+            ><button data-period="1y" aria-pressed="false">1 year</button
+            ><button data-period="3m" aria-pressed="false">3 months</button
+            ><button data-period="1m" aria-pressed="true">1 month</button
+            ><button data-period="1w" aria-pressed="false">1 week</button
+            ><button data-period="1d" aria-pressed="false">1 day</button>
+          </div>
+          <span class="chip"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#clock" /></svg
+            ><span id="date-range">—</span></span
+          >
+        </div>
+        <div id="notices" aria-live="polite"></div>
+        <section class="cards" aria-label="Usage totals">
+          <article class="card metric tone-violet">
+            <div class="metric-head">
+              <span class="metric-icon"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#timer" /></svg></span
+              >Time walking
+            </div>
+            <div class="metric-value">
+              <span id="hours">—</span><small>hrs</small>
+            </div>
+            <div class="metric-note" id="session-count">
+              Walking time, excluding pauses
+            </div>
+          </article>
+          <article class="card metric tone-orange">
+            <div class="metric-head">
+              <span class="metric-icon"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#footprints" /></svg></span
+              >Steps taken
+            </div>
+            <div class="metric-value">
+              <span id="steps">—</span><small>steps</small>
+            </div>
+            <div class="metric-note">
+              Estimated from distance &amp; step length
+            </div>
+          </article>
+          <article class="card metric tone-cyan">
+            <div class="metric-head">
+              <span class="metric-icon"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#gauge" /></svg></span
+              >Average speed
+            </div>
+            <div class="metric-value">
+              <span id="speed">—</span><small>km/h</small>
+            </div>
+            <div class="metric-note">Weighted by time walking</div>
+          </article>
+          <article class="card metric tone-pink">
+            <div class="metric-head">
+              <span class="metric-icon"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#flame" /></svg></span
+              >Calories burned
+            </div>
+            <div class="metric-value">
+              <span id="calories">—</span><small>kcal</small>
+            </div>
+            <div class="metric-note">Estimated total energy while walking</div>
+          </article>
+        </section>
+        <div class="chart-grid">
+          <section class="card panel chart-panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="metric-icon tone-violet"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#trending-up" /></svg
+                ></span>
+                <div>
+                  <h2>Movement over time</h2>
+                  <p class="subtle" id="chart-subtitle">
+                    Your daily walking rhythm
+                  </p>
+                </div>
+              </div>
+              <div class="segmented small" aria-label="Graph metric">
+                <button data-metric="hours" aria-pressed="true">Time</button
+                ><button data-metric="distance_km" aria-pressed="false">
+                  Distance</button
+                ><button data-metric="steps" aria-pressed="false">
+                  Steps
+                </button>
+              </div>
+            </div>
+            <div class="chart-summary">
+              <div class="stat">
+                <strong id="chart-total">—</strong
+                ><span><i></i><span id="chart-unit">hours walked</span></span>
+              </div>
+              <div class="stat">
+                <strong id="distance">—</strong
+                ><span
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#route" /></svg
+                  >km covered</span
+                >
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <svg
+                class="chart"
+                id="activity-chart"
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="Walking activity graph"
+              ></svg>
+              <div class="tooltip" id="chart-tooltip" hidden></div>
+            </div>
+          </section>
+          <section class="card panel donut-panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="metric-icon tone-cyan"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#zap" /></svg
+                ></span>
+                <div>
+                  <h2>Find your pace</h2>
+                  <p class="subtle">Walking time by speed level</p>
+                </div>
+              </div>
+            </div>
+            <div class="donut-wrap">
+              <svg
+                viewBox="0 0 180 180"
+                id="pace-chart"
+                role="img"
+                aria-label="Walking time by speed level"
+              ></svg>
+              <div class="donut-label">
+                <strong id="pace-hours">—</strong><span>hours in motion</span>
+              </div>
+            </div>
+            <div class="legend" id="pace-legend"></div>
+          </section>
+        </div>
+        <section class="card sessions">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="metric-icon tone-orange"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#footprints" /></svg
+              ></span>
+              <div>
+                <h2>Recent sessions</h2>
+                <p class="subtle" id="sessions-note">
+                  Your latest walks in this period
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date &amp; time</th>
+                  <th>Duration</th>
+                  <th>Distance</th>
+                  <th>Avg. speed</th>
+                  <th>Device</th>
+                  <th>Activity</th>
+                </tr>
+              </thead>
+              <tbody id="sessions"></tbody>
+            </table>
+          </div>
+        </section>
+        <footer class="footer">
+          <span>tread · Make room for movement.</span
+          ><span
+            >Derived from sent commands · Steps &amp; calories are estimates ·
+            <a href="/settings.html"
+              >View configuration<svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#arrow-up-right" /></svg></a
+          ></span>
+        </footer>
+      </main>
+    </div>
     <script src="/app.js" defer></script>
   </body>
 </html>

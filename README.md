@@ -10,7 +10,7 @@ go run ./cmd/tread serve -demo
 
 Open <http://127.0.0.1:8080>. Demo mode generates over three years of history in an isolated, in-memory SQLite database. It never connects to Bluetooth or changes your real database. The API is read-only in demo mode. Stop it with Ctrl+C.
 
-The dashboard includes all time, 3 years, 1 year, 3 months, 1 month, 1 week and 1 day. It shows walking hours, estimated steps, time-weighted average speed, estimated calories, distance, activity bars, a speed-distribution donut and recent sessions. The configuration page shows personal settings and speed calibration. All assets are embedded; there are no frontend dependencies or CDN requests.
+The dashboard includes all time, 3 years, 1 year, 3 months, 1 month, 1 week and 1 day. It shows walking hours, estimated steps, time-weighted average speed, estimated calories, distance, activity bars, a speed-distribution donut and recent sessions. The configuration page shows personal settings and speed calibration. All assets are embedded; there are no frontend dependencies or CDN requests. Icons are a vendored subset of [Lucide](https://lucide.dev) (ISC, license in `web/icons.svg`).
 
 ## Set up your treadmill
 

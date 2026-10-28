@@ -3,131 +3,199 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#7e43fe" />
     <title>Configuration · tread</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand" href="/"
-        ><span class="brand-mark">↗</span>tread<span style="color: #a5b297"
-          >.</span
-        ></a
-      >
-      <nav class="nav" aria-label="Main">
-        <a href="/">Overview</a
-        ><a class="active" aria-current="page" href="/settings.html"
-          >Configuration</a
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="/"
+          ><span class="brand-mark"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#activity" /></svg></span
+          ><span>tread<b>.</b></span></a
         >
-      </nav>
-      <div class="status">
-        <span class="dot"></span
-        ><span class="device-name" data-device>Usage tracker</span
-        ><span class="demo-label" data-demo hidden>DEMO DATA</span>
-      </div>
-    </header>
-    <main>
-      <div class="eyebrow">Make it your own</div>
-      <div class="heading">
-        <div>
-          <h1>Your configuration</h1>
-          <p>Personal measurements and the details behind your statistics.</p>
+        <nav class="nav" aria-label="Main">
+          <div class="nav-label">Menu</div>
+          <a href="/"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#layout-dashboard" /></svg
+            ><span>Overview</span></a
+          ><a class="active" aria-current="page" href="/settings.html"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#sliders-horizontal" /></svg
+            ><span>Configuration</span></a
+          >
+        </nav>
+        <div class="device-card">
+          <span class="device-icon"
+            ><svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#bluetooth" /></svg
+          ></span>
+          <div class="device-text">
+            <span>Treadmill</span><strong data-device>Usage tracker</strong>
+          </div>
+          <span class="demo-label" data-demo hidden>Demo</span>
         </div>
-        <span class="read-only">Read from config file</span>
-      </div>
-      <div id="notices" aria-live="polite"></div>
-      <div class="settings-grid">
-        <section class="card panel">
-          <div class="panel-head">
-            <div>
-              <h2>Personal profile</h2>
-              <p class="subtle">
-                Used to estimate steps and energy expenditure
-              </p>
+      </aside>
+      <main>
+        <header class="page-head">
+          <div>
+            <p class="eyebrow">Make it your own</p>
+            <h1>Your configuration</h1>
+            <p>Personal measurements and the details behind your statistics.</p>
+          </div>
+          <div class="head-actions">
+            <span class="chip"
+              ><svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#info" /></svg
+              >Read from config file</span
+            >
+          </div>
+        </header>
+        <div id="notices" aria-live="polite"></div>
+        <div class="settings-grid">
+          <section class="card panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="metric-icon tone-orange"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#user-round" /></svg
+                ></span>
+                <div>
+                  <h2>Personal profile</h2>
+                  <p class="subtle">
+                    Used to estimate steps and energy expenditure
+                  </p>
+                </div>
+              </div>
             </div>
-            <span class="metric-icon">◎</span>
-          </div>
-          <div class="settings-list" id="personal"></div>
-          <div class="info">
-            Steps use your measured step length, or an approximate 41.4% of your
-            height. Calories use speed-based treadmill MET values and your
-            resting energy. With weight, height, age and male/female gender
-            supplied, resting energy uses Mifflin-St Jeor. Otherwise the
-            baseline is 1 kcal/kg/hour. Calories include resting energy during
-            walking.
-          </div>
-        </section>
-        <section class="card panel">
-          <div class="panel-head">
-            <div>
-              <h2>Treadmill</h2>
-              <p class="subtle">The device controlled by your CLI</p>
+            <div class="settings-list" id="personal"></div>
+            <div class="info">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#info" /></svg
+              ><span
+                >Steps use your measured step length, or an approximate 41.4% of
+                your height. Calories use speed-based treadmill MET values and
+                your resting energy. With weight, height, age and male/female
+                gender supplied, resting energy uses Mifflin-St Jeor. Otherwise
+                the baseline is 1 kcal/kg/hour. Calories include resting energy
+                during walking.</span
+              >
             </div>
-            <span class="metric-icon">↗</span>
-          </div>
-          <div class="settings-list" id="device"></div>
-          <div class="info">
-            Use the same device identifier in every controller config for this
-            treadmill. The initial level must match the belt's actual speed on
-            first start. Commands sent with another remote are not recorded.
-          </div>
-        </section>
-        <section class="card panel wide">
-          <div class="panel-head">
-            <div>
-              <h2>Speed calibration</h2>
-              <p class="subtle">Physical belt speed at each command level</p>
+          </section>
+          <section class="card panel">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="metric-icon tone-cyan"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#bluetooth" /></svg
+                ></span>
+                <div>
+                  <h2>Treadmill</h2>
+                  <p class="subtle">The device controlled by your CLI</p>
+                </div>
+              </div>
             </div>
-            <span class="read-only" id="calibration-state">Not calibrated</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Speed level</th>
-                  <th>Kilometres / hour</th>
-                  <th>Metres / second</th>
-                  <th>Relative speed</th>
-                </tr>
-              </thead>
-              <tbody id="calibration"></tbody>
-            </table>
-          </div>
-          <div class="info">
-            Measure the belt length in metres, count full belt revolutions over
-            a timed interval, then calculate
-            <code>km/h = belt length × revolutions ÷ seconds × 3.6</code>. Write
-            all eight values under <code>[treadmill.speed_kmh]</code>, then set
-            <code>calibrated = true</code> under <code>[treadmill]</code>.
-            Updating calibration recalculates historical estimates.
-          </div>
-        </section>
-        <section class="card panel wide">
-          <div class="panel-head">
-            <div>
-              <h2>Application settings</h2>
-              <p class="subtle">Managed on your server</p>
+            <div class="settings-list" id="device"></div>
+            <div class="info">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#info" /></svg
+              ><span
+                >Use the same device identifier in every controller config for
+                this treadmill. The initial level must match the belt's actual
+                speed on first start. Commands sent with another remote are not
+                recorded.</span
+              >
             </div>
-          </div>
-          <div class="settings-list" id="application"></div>
-          <div class="info">
-            This page is read-only. Edit the TOML file on your server;
-            statistics and this page read changes on the next request. Restart
-            the server to change its listen address or database path. Calorie
-            reference:
-            <a
-              href="https://pacompendium.com/walking/"
-              target="_blank"
-              rel="noreferrer"
-              >2024 Adult Compendium, treadmill walking ↗</a
-            >.
-          </div>
-        </section>
-      </div>
-      <footer class="footer">
-        <span>tread · Make room for movement.</span
-        ><a href="/">Back to your overview ↗</a>
-      </footer>
-    </main>
+          </section>
+          <section class="card panel wide">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="metric-icon tone-violet"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#ruler" /></svg
+                ></span>
+                <div>
+                  <h2>Speed calibration</h2>
+                  <p class="subtle">Physical belt speed at each command level</p>
+                </div>
+              </div>
+              <span class="chip" id="calibration-state">Not calibrated</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Speed level</th>
+                    <th>Kilometres / hour</th>
+                    <th>Metres / second</th>
+                    <th>Relative speed</th>
+                  </tr>
+                </thead>
+                <tbody id="calibration"></tbody>
+              </table>
+            </div>
+            <div class="info">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#info" /></svg
+              ><span
+                >Measure the belt length in metres, count full belt revolutions
+                over a timed interval, then calculate
+                <code>km/h = belt length × revolutions ÷ seconds × 3.6</code>.
+                Write all eight values under <code>[treadmill.speed_kmh]</code>,
+                then set <code>calibrated = true</code> under
+                <code>[treadmill]</code>. Updating calibration recalculates
+                historical estimates.</span
+              >
+            </div>
+          </section>
+          <section class="card panel wide">
+            <div class="panel-head">
+              <div class="panel-title">
+                <span class="metric-icon tone-pink"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#server" /></svg
+                ></span>
+                <div>
+                  <h2>Application settings</h2>
+                  <p class="subtle">Managed on your server</p>
+                </div>
+              </div>
+            </div>
+            <div class="settings-list three" id="application"></div>
+            <div class="info">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#info" /></svg
+              ><span
+                >This page is read-only. Edit the TOML file on your server;
+                statistics and this page read changes on the next request.
+                Restart the server to change its listen address or database
+                path. Calorie reference:
+                <a
+                  href="https://pacompendium.com/walking/"
+                  target="_blank"
+                  rel="noreferrer"
+                  >2024 Adult Compendium, treadmill walking<svg
+                    class="icon"
+                    aria-hidden="true"
+                  >
+                    <use href="/icons.svg#arrow-up-right" /></svg></a
+                >.</span
+              >
+            </div>
+          </section>
+        </div>
+        <footer class="footer">
+          <span>tread · Make room for movement.</span
+          ><a href="/"
+            >Back to your overview<svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#arrow-up-right" /></svg
+          ></a>
+        </footer>
+      </main>
+    </div>
     <script src="/app.js" defer></script>
   </body>
 </html>
