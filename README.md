@@ -18,7 +18,8 @@ Requires Go as specified in `go.mod`, Linux, and BlueZ for Bluetooth commands.
 
 ```sh
 go build -o tread ./cmd/tread
-mkdir -p ~/.config/tread
+mkdir -p ~/.local/bin ~/.config/tread
+ln -s "$(pwd)/tread" ~/.local/bin/tread  # Once, if the link does not already exist
 cp config.example.toml ~/.config/tread/config.toml
 ```
 
@@ -26,25 +27,50 @@ Edit the file. Set `treadmill.mac`, personal measurements and measured belt spee
 
 Use `tread -config /path/to/config.toml ...` or `TREAD_CONFIG` for a different file. A missing default config uses defaults and does not enable Bluetooth. `tread config` prints the effective configuration.
 
-Start the server, then use another terminal for control:
+Run `tread serve` for the dashboard if it is not already running. No server restart is needed for controller or keybinding changes.
+
+### Controls and local state
+
+`start`, `resume`, `pause`, `stop` and `speed <1-8>` are explicit controls. `speed` takes a **level from 1 to 8**, transmitted as 10 to 80, not a known physical speed. `start` and `resume` send the same command. A speed command can start the belt even while stopped. Only issue movement commands deliberately, with the belt clear and when ready for movement.
+
+- `toggle` pauses a locally known running treadmill, or starts a locally known paused/stopped one. Unknown mode refuses the command.
+- `speed-up` and `speed-down` change one level only when both running mode and speed are locally known. At levels 8 and 1 respectively they do nothing, with no Bluetooth write or usage event.
+- `reset-state` forgets local mode and speed without moving the belt. It preserves queued usage and confirmed pending events.
+- `status` sends a query but decodes no telemetry. It cannot discover or confirm mode or speed.
+
+A new installation starts with unknown knowledge; the new buttons cannot initialize it. When ready for movement, deliberately establish mode with an explicit `start` and speed with an explicit `speed`. For example, after checking the treadmill and surroundings:
 
 ```sh
-./tread serve
-./tread start
-./tread speed 3
-./tread pause
-./tread resume
-./tread stop
-./tread stats -period 1m
-./tread stats -period all -json
-./tread sync
+tread start
+tread speed 1
+# Only after both succeed, relative speed keys can be used.
+tread pause
+tread resume
+tread stop
 ```
 
-`speed` takes a **level from 1 to 8**, transmitted as 10 to 80, not a known physical speed. `start` and `resume` send the same command. `status` sends the device's status query, but does not decode telemetry or report its current state. `help` lists commands. `serve -listen 127.0.0.1:8090` overrides the listen address; update `server_url` in CLI configs accordingly. `stats -days N` supports a custom day count.
+Successful explicit start/resume/pause/stop commands establish only mode; `speed` establishes only speed. Starting never invents a speed from `initial_level`, which is for statistics. Pause/stop establish enough mode knowledge for toggle, but relative speed still requires running mode and known speed.
 
-For a homeserver, run `serve` there and point each controller's `server_url` at it. Give all controllers of one treadmill the same `device` identifier. Keep personal metrics and calibration in the **server's** configuration. The API has no authentication; the server binds to localhost by default. Use a private network or an authenticated reverse proxy to make it available elsewhere.
+Knowledge lives in `control-state.json` and the crash marker `control-state.json.in-flight`, beside the config and `queue.jsonl`. It is bound to the configured device, driver, Bluetooth address and Linux boot ID. Reboot, identity changes or an interrupted/failed write invalidate knowledge. These files record sent commands, not telemetry: the treadmill can reject a write without the CLI knowing. Physical power cycles, remote controls and suspend can invalidate assumptions without automatic detection. Run `tread reset-state` after those situations, then deliberately re-establish knowledge only when ready for movement. Do not delete runtime files to reset; they may contain confirmed usage awaiting recovery. Bluetooth failures are never automatically retried.
 
-A successful Bluetooth write is followed immediately by event delivery to the server. Failed Bluetooth writes do not create usage. Events are saved to `queue.jsonl` beside the controller's config before attempting HTTP delivery. If the server is offline, they remain there until the next command or `sync`. Separate CLI processes share a file lock. SQLite deduplicates event IDs, so delivery retries are safe. Commands cannot detect a physical rejection by the treadmill, actions from a remote, or a process/power failure between the Bluetooth write and local event persistence.
+Successful movement commands commit local state and queue usage before automatically attempting HTTP delivery outside the control lock. Offline events remain queued until the next successful movement command or `sync`; status, reset and bound no-ops do not deliver them. Separate CLI processes share a file lock, and SQLite deduplicates event IDs. A crash between a Bluetooth write and local confirmation can still leave the physical outcome and usage unknown.
+
+```sh
+tread sync                       # Retry usage delivery, not Bluetooth controls
+tread stats -period 1m
+tread stats -period all -json
+tread help
+```
+
+`help` lists all commands, including `config` and `serve`. `serve -listen 127.0.0.1:8090` overrides the listen address; update `server_url` in the controller config accordingly. `stats -days N` supports a custom day count.
+
+For a homeserver, run `serve` there and point the controller's `server_url` at it. Use only one controller/config for physical controls per treadmill to avoid divergent local knowledge. Keep a stable `device` identifier and keep personal metrics and calibration in the **server's** configuration. The API has no authentication; the server binds to localhost by default. Use a private network or an authenticated reverse proxy to make it available elsewhere.
+
+### Kyria and Hyprland on this workstation
+
+The installed host bindings in `~/.config/hypr/UserConfigs/UserKeybinds.lua` are nonrepeating: F14 sends `speed-down`, F16 sends `toggle`, and F15 sends `speed-up`. `~/.config/hypr/UserScripts/TreadmillControl.sh` allows only those actions, invokes `~/.local/bin/tread` once and notifies on CLI failure without retrying. Unknown state therefore produces an error notification, not an assumed start or speed change.
+
+`~/.local/bin/tread` links to `/home/lman/Code/go/oss-treadmill/tread`; rebuild that ignored binary with `go build -o tread ./cmd/tread` after CLI changes. The Kyria NSL right-bottom three mappings are compiled in `/home/lman/Code/qmk/splitkb_kyria_rev2_base_xarcdev.uf2` but **not flashed**. The keyboard still needs a deliberate firmware flash before those keys emit the new mappings. Host binding installation does not initialize treadmill state.
 
 ## Calibrate statistics
 
@@ -107,6 +133,7 @@ internal/device/   Device driver selection and command encoding
 internal/protocol/ DFT200 packet format and checksum
 internal/config/   TOML settings and validation
 internal/event/    Control events and offline delivery
+internal/control/  Conservative local mode/speed knowledge and command journal
 internal/store/    SQLite event storage
 internal/stats/    Sessions, calibration, date ranges and estimates
 internal/goals/    Optional YAML targets and calendar progress
