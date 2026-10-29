@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>tread</title>
+  <rect width="64" height="64" rx="18" fill="#7e43fe" />
+  <g fill="#fff">
+    <circle cx="29" cy="15" r="4" />
+    <rect x="10" y="46" width="44" height="7" rx="3.5" />
+  </g>
+  <g fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 31l8-6 8 7h8M28 25l-4 11-7 7m7-7 9 7" />
+    <path d="M46 46l6-23h-9" />
+  </g>
+</svg>

@@ -1,9 +1,50 @@
 package web
 
 import (
+	"encoding/xml"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestFavicon(t *testing.T) {
+	index, err := FS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(index), `<link rel="icon" type="image/svg+xml" href="/favicon.svg" />`) {
+		t.Fatal("dashboard must link to the SVG favicon")
+	}
+
+	icon, err := FS.ReadFile("favicon.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var svg struct {
+		XMLName xml.Name
+		ViewBox string `xml:"viewBox,attr"`
+	}
+	if err := xml.Unmarshal(icon, &svg); err != nil {
+		t.Fatalf("invalid favicon SVG: %v", err)
+	}
+	if svg.XMLName.Local != "svg" || svg.XMLName.Space != "http://www.w3.org/2000/svg" || svg.ViewBox != "0 0 64 64" {
+		t.Fatalf("unexpected SVG root: %+v", svg)
+	}
+
+	// The server serves GET / through this embedded file handler.
+	recorder := httptest.NewRecorder()
+	http.FileServerFS(FS).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/favicon.svg", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("favicon status = %d, want 200", recorder.Code)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "image/svg+xml" {
+		t.Errorf("favicon Content-Type = %q, want image/svg+xml", got)
+	}
+	if recorder.Body.String() != string(icon) {
+		t.Error("favicon response does not match embedded SVG")
+	}
+}
 
 func TestDashboardCopyAndSessionIcon(t *testing.T) {
 	assets := make(map[string]string)

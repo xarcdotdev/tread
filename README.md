@@ -157,10 +157,10 @@ With `-config /path/to/config.toml` or `TREAD_CONFIG`, use `/path/to/goals.yaml`
 
 ```yaml
 daily:
-  steps: 6000
+  steps: 1000
   calories: 250
   time: 30m
-  average_speed_kmh: 3.5
+  average_speed_kmh: 1.5
 weekly:
   time: 5h
 monthly:

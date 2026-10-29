@@ -136,7 +136,7 @@ func (s *Server) getGoals(w http.ResponseWriter, r *http.Request) {
 		// In-memory examples only. Never open the user's goals file in demo mode.
 		path = "Built-in sample targets (no file)"
 		targets = goals.Config{
-			Daily:   goals.Targets{Steps: 6000, Calories: 250, Time: 30 * time.Minute, AverageSpeedKMH: 3.5},
+			Daily:   goals.Targets{Steps: 1000, Calories: 250, Time: 30 * time.Minute, AverageSpeedKMH: 1.5},
 			Weekly:  goals.Targets{Time: 5 * time.Hour},
 			Monthly: goals.Targets{Steps: 150000},
 			Yearly:  goals.Targets{Time: 250 * time.Hour},

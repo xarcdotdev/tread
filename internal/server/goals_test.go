@@ -215,7 +215,7 @@ func TestGoalsDemoNeverLoadsDiskTargetsOrSettings(t *testing.T) {
 		if !r.Demo || !r.ReadOnly || r.Path == goals.Path(cfg) || !strings.Contains(r.Path, "sample") || r.Timezone != cfg.Timezone {
 			t.Fatalf("demo metadata: %+v", r)
 		}
-		if len(r.Periods) != 4 || len(r.Periods[0].Metrics) != 4 || r.Periods[0].Metrics[0].Target != 6000 || r.Periods[1].Metrics[0].Target != 18000 {
+		if len(r.Periods) != 4 || len(r.Periods[0].Metrics) != 4 || r.Periods[0].Metrics[0].Target != 1000 || r.Periods[0].Metrics[3].Target != 1.5 || r.Periods[1].Metrics[0].Target != 18000 {
 			t.Fatalf("demo did not use illustrative targets: %+v", r.Periods)
 		}
 		data, err := os.ReadFile(goals.Path(cfg))
