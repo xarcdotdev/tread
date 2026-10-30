@@ -102,6 +102,21 @@ func TestDefaultAddresses(t *testing.T) {
 	}
 }
 
+func TestDBPathEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("db_path = \"/from/file.db\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TREAD_DB_PATH", "")
+	if cfg, err := LoadFile(path); err != nil || cfg.DBPath != "/from/file.db" {
+		t.Fatalf("file db_path: %q, %v", cfg.DBPath, err)
+	}
+	t.Setenv("TREAD_DB_PATH", "/from/env.db")
+	if cfg, err := LoadFile(path); err != nil || cfg.DBPath != "/from/env.db" {
+		t.Fatalf("env db_path: %q, %v", cfg.DBPath, err)
+	}
+}
+
 func TestLoadAddresses(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, listen, serverURL string

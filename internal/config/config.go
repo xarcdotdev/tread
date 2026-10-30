@@ -89,6 +89,9 @@ func LoadFile(path string) (Config, error) {
 	if err != nil {
 		return c, err
 	}
+	if db := os.Getenv("TREAD_DB_PATH"); db != "" {
+		c.DBPath = db
+	}
 	if c.Treadmill.MAC == "" {
 		c.Treadmill.MAC = c.MAC
 	}

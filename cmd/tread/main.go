@@ -42,6 +42,7 @@ const usage = `usage: tread [-config path] [-direct] <command> [options]
 
 Periods: all, 3y, 1y, 3m, 1m, 1w, 1d
 Config: TREAD_CONFIG or ~/.config/tread/config.toml
+Database: TREAD_DB_PATH, else db_path, else tread.db beside the default config.
 Controls use the agent, without fallback or automatic retry.
 -direct explicitly uses short-lived Bluetooth; -direct sync only delivers local usage.
 Runtime: TREAD_RUNTIME_DIR, else $XDG_RUNTIME_DIR/tread (created), else /run/tread.
