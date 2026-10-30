@@ -8,10 +8,14 @@
 
 <p align="center">A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. Currently supporting DFT200.</p>
 
+<p align="center">
+  <a href="#setup">Setup</a> · <a href="#commands">Commands</a> · <a href="#configuration">Configuration</a>
+</p>
+
 <br>
 
 > [!NOTE]
-> This is completed vibe-coded. Use at your own risk.
+> This project is entirely vibe-coded. Use at your own risk.
 
 ![Dashboard overview with walking time, steps, speed, calories and charts for the past month](docs/images/dashboard.png)
 
@@ -32,11 +36,15 @@ Open <http://127.0.0.1:18743>. Demo mode uses generated history in an in-memory 
 | ----------------- | ------------------ | ----------------------------------------- | ------------ | ------------------------------------------------------- |
 | Sportstech DFT200 | `dft200`           | start, pause, resume, stop, speed, status | 1–8          | Experimental: speed, distance ([Telemetry](#telemetry)) |
 
-Devices connect over Bluetooth LE through BlueZ. To add a device, implement `device.Driver` in a new `internal/drivers/` subpackage and add it to the registry in `internal/drivers/drivers.go`. Speed levels other than 1–8 aren't supported yet.
+Devices connect over Bluetooth LE through BlueZ. Speed levels other than 1–8 aren't supported yet.
 
 ## Setup
 
+### Requirements
+
 Requires Go (see `go.mod`), Linux and BlueZ.
+
+### Install
 
 ```sh
 go build -o tread ./cmd/tread
@@ -45,7 +53,16 @@ ln -s "$(pwd)/tread" ~/.local/bin/tread
 cp config.example.toml ~/.config/tread/config.toml
 ```
 
-Edit the config: set `treadmill.mac` (find it with `bluetoothctl`, `scan on`, `devices`), your personal measurements and calibrated speeds. Use `-config <path>` or `TREAD_CONFIG` for another config file, `TREAD_DB_PATH` to override `db_path` for the SQLite database, and `TREAD_STATE_DIR` for the usage queue and control state (default: `~/.local/state/tread`). Keep the state directory persistent; it can hold usage not yet delivered. `tread config` prints the effective configuration.
+### Configuration
+
+- Set `treadmill.mac`. Find the MAC with `bluetoothctl`, then `scan on` and `devices`.
+- Set your personal measurements and calibrated speeds in the config.
+- Use `-config <path>` or `TREAD_CONFIG` to select another config file.
+- Set `TREAD_DB_PATH` to override `db_path` for the SQLite database.
+- Set `TREAD_STATE_DIR` to change the usage queue and control state directory (default: `~/.local/state/tread`). Keep this directory persistent; it can hold usage not yet delivered.
+- Run `tread config` to print the effective configuration.
+
+### Run
 
 Then run these two long-lived processes:
 
@@ -75,29 +92,7 @@ tread stats -period 1m     # or -period all -json, -days N
 tread help
 ```
 
-### Local state
-
-tread tracks mode and speed from the commands it sends, not from telemetry. `speed-up`/`speed-down` only work once running mode and speed are known: start the belt, then use `speed <n>` or `speed-down` to establish speed.
-
-After a power cycle, remote-control use or suspend, run `tread reset-state` to forget local knowledge. Don't delete the files in the state directory; they may hold usage awaiting delivery.
-
-### Telemetry
-
-Set `experimental_van_telemetry = true` to decode live readings (speed, distance) shown in `observed` and the dashboard. Reported values are the treadmill's nominal speed, not your calibrated speed. With telemetry on, `idle_disconnect_timeout` disconnects after a period of paused, zero-speed state; the next command reconnects.
-
-### Remote server
-
-Run `serve` on another host and point the controller's `server_url` at it. Keep personal settings and calibration in the server's config. The API has no authentication, so use a private network or authenticated reverse proxy.
-
-### Optional hostname
-
-```sh
-sudo "$(command -v tread)" setup-host -name tread.localhost
-```
-
-Adds a `/etc/hosts` entry for <http://tread.localhost:18743>.
-
-## Statistics
+## Statistics & calibration
 
 Measure each speed level and fill `[treadmill.speed_kmh]`, then set `calibrated = true`:
 
@@ -136,7 +131,48 @@ All entries are optional. Periods are calendar-based (Monday-start weeks) in the
 
 ![Goals page with daily, weekly, monthly and yearly progress bars](docs/images/goals.png)
 
-## Structure
+## Advanced usage
+
+### Local state
+
+tread tracks mode and speed from the commands it sends, not from telemetry. `speed-up`/`speed-down` only work once running mode and speed are known: start the belt, then use `speed <n>` or `speed-down` to establish speed.
+
+After a power cycle, remote-control use or suspend, run `tread reset-state` to forget local knowledge. Don't delete the files in the state directory; they may hold usage awaiting delivery.
+
+### Telemetry
+
+Set `experimental_van_telemetry = true` to decode live readings (speed, distance) shown in `observed` and the dashboard. Reported values are the treadmill's nominal speed, not your calibrated speed. With telemetry on, `idle_disconnect_timeout` disconnects after a period of paused, zero-speed state; the next command reconnects.
+
+### Remote server
+
+Run `serve` on another host and point the controller's `server_url` at it. Keep personal settings and calibration in the server's config. The API has no authentication, so use a private network or authenticated reverse proxy.
+
+### Optional hostname
+
+```sh
+sudo "$(command -v tread)" setup-host -name tread.localhost
+```
+
+Adds a `/etc/hosts` entry for <http://tread.localhost:18743>.
+
+## Development
+
+```sh
+go test ./...
+go vet ./...
+```
+
+The images in `docs/images` come from `scripts/demo`, which runs the agent on a fake Bluetooth backend with generated history:
+
+```sh
+(cd scripts && npm install && npm run screenshots)  # needs Chrome or Chromium
+vhs scripts/cli.tape                                # needs VHS
+```
+
+To add a device, implement `device.Driver` in a new `internal/drivers/` subpackage and add it to the registry in `internal/drivers/drivers.go`.
+
+<details>
+<summary>Directory structure</summary>
 
 ```text
 cmd/tread/          CLI, commands, server startup
@@ -157,19 +193,7 @@ internal/demo/      Mock history
 web/                Plain HTML/CSS/JS dashboard
 ```
 
-## Development
-
-```sh
-go test ./...
-go vet ./...
-```
-
-The images in `docs/images` come from `scripts/demo`, which runs the agent on a fake Bluetooth backend with generated history:
-
-```sh
-(cd scripts && npm install && npm run screenshots)  # needs Chrome or Chromium
-vhs scripts/cli.tape                                # needs VHS
-```
+</details>
 
 ## License
 
