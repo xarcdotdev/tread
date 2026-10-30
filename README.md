@@ -1,6 +1,14 @@
-# tread
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo_light.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/images/logo_dark.png">
+    <img src="docs/images/logo_dark.png" alt="tread" width="250">
+  </picture>
+</p>
 
-A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. Currently supporting DFT200.
+<p align="center">A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. Currently supporting DFT200.</p>
+
+<br>
 
 > [!NOTE]
 > This is completed vibe-coded. Use at your own risk.
