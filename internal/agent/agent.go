@@ -16,6 +16,7 @@ import (
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
 	"github.com/xarcdotdev/oss-treadmill/internal/control"
 	"github.com/xarcdotdev/oss-treadmill/internal/device"
+	"github.com/xarcdotdev/oss-treadmill/internal/drivers"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 	"github.com/xarcdotdev/oss-treadmill/internal/ownership"
@@ -55,7 +56,7 @@ func Run(ctx context.Context, cfg config.Config, opts Options) error {
 	if err != nil || len(mac) != 6 {
 		return errors.New("invalid treadmill MAC")
 	}
-	driver, err := device.Lookup(cfg.Treadmill.Driver)
+	driver, err := drivers.Lookup(cfg.Treadmill.Driver)
 	if err != nil {
 		return err
 	}

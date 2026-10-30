@@ -18,6 +18,7 @@ import (
 	"github.com/xarcdotdev/oss-treadmill/internal/atomicfile"
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
 	"github.com/xarcdotdev/oss-treadmill/internal/device"
+	"github.com/xarcdotdev/oss-treadmill/internal/drivers"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 )
@@ -157,7 +158,7 @@ func (c *Controller) Execute(action string, level int) (Result, error) {
 	if err != nil || len(mac) != 6 {
 		return Result{}, errors.New("set a valid treadmill.mac in config first")
 	}
-	driver, err := device.Lookup(c.Config.Treadmill.Driver)
+	driver, err := drivers.Lookup(c.Config.Treadmill.Driver)
 	if err != nil {
 		return Result{}, err
 	}

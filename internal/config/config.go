@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/xarcdotdev/oss-treadmill/internal/drivers"
 )
 
 type Personal struct {
@@ -137,8 +139,8 @@ func (c Config) validate(now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("timezone: %w", err)
 	}
-	if c.Treadmill.Driver != "dft200" {
-		return fmt.Errorf("unknown treadmill driver %q", c.Treadmill.Driver)
+	if _, err := drivers.Lookup(c.Treadmill.Driver); err != nil {
+		return err
 	}
 	if c.Device == "" {
 		return errors.New("device must be a stable treadmill identifier")

@@ -102,6 +102,17 @@ func TestDefaultAddresses(t *testing.T) {
 	}
 }
 
+func TestDriverMustBeRegistered(t *testing.T) {
+	cfg := Default()
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Treadmill.Driver = "unknown"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), `unknown treadmill driver "unknown"`) {
+		t.Fatalf("unknown driver: %v", err)
+	}
+}
+
 func TestDBPathEnv(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("db_path = \"/from/file.db\"\n"), 0600); err != nil {

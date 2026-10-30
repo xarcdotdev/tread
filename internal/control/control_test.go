@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
-	"github.com/xarcdotdev/oss-treadmill/internal/device"
+	"github.com/xarcdotdev/oss-treadmill/internal/drivers/dft200"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
 )
 
@@ -24,7 +24,7 @@ func fixture(t *testing.T) (*Controller, *[][]byte) {
 	packets := new([][]byte)
 	c := &Controller{Config: cfg, Queue: event.NewClient("", cfg.QueuePath()), BootID: func() (string, error) { return "boot1", nil }}
 	c.Send = func(mac, uuid string, packet []byte) error {
-		if mac != "aa:bb:cc:dd:ee:ff" || uuid != (device.DFT200{}).WriteUUID() {
+		if mac != "aa:bb:cc:dd:ee:ff" || uuid != (dft200.Driver{}).WriteUUID() {
 			t.Fatalf("transport identity: %s %s", mac, uuid)
 		}
 		*packets = append(*packets, append([]byte(nil), packet...))
@@ -78,7 +78,7 @@ func TestKnowledgeAndPackets(t *testing.T) {
 		t.Fatalf("counts %d %d", len(es), len(*packets))
 	}
 	for i, w := range wants {
-		p, _ := (device.DFT200{}).Packet(w.a, w.n)
+		p, _ := (dft200.Driver{}).Packet(w.a, w.n)
 		if !bytes.Equal((*packets)[i], p) {
 			t.Fatalf("packet %d", i)
 		}
@@ -349,7 +349,7 @@ func TestStatusDoesNotObserve(t *testing.T) {
 		t.Fatal("status reporting")
 	}
 	execute(t, c, "toggle", 0)
-	if start, _ := (device.DFT200{}).Packet("start", 0); !bytes.Equal((*p)[1], start) {
+	if start, _ := (dft200.Driver{}).Packet("start", 0); !bytes.Equal((*p)[1], start) {
 		t.Fatal("status observed mode")
 	}
 }

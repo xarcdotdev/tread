@@ -9,6 +9,7 @@ import (
 
 	"github.com/xarcdotdev/oss-treadmill/internal/ble"
 	"github.com/xarcdotdev/oss-treadmill/internal/device"
+	"github.com/xarcdotdev/oss-treadmill/internal/drivers/dft200"
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 )
 
@@ -26,7 +27,7 @@ func (p *testTelemetry) Run(ctx context.Context, _ device.Link, _ <-chan device.
 }
 
 type idleTestDriver struct {
-	device.DFT200
+	dft200.Driver
 	emit chan func(observed.Update)
 }
 

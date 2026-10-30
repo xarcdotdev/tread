@@ -1,4 +1,4 @@
-package device
+package dft200
 
 import (
 	"bytes"
@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
-	"github.com/xarcdotdev/oss-treadmill/internal/protocol"
 )
 
 // These transport-only tests use synthetic replies. They make no BLE connection.
@@ -36,7 +36,7 @@ type vanHarness struct {
 	t             *testing.T
 	session       *vanSession
 	link          *vanTestLink
-	notifications chan Notification
+	notifications chan device.Notification
 	updates       chan observed.Update
 	done          chan error
 	cancel        context.CancelFunc
@@ -44,7 +44,7 @@ type vanHarness struct {
 
 func newVANHarness(t *testing.T, configure func(*vanSession, *vanTestLink)) *vanHarness {
 	t.Helper()
-	raw, err := (DFT200{}).NewTelemetry(TelemetryOptions{ExperimentalVAN: true})
+	raw, err := (Driver{}).NewTelemetry(device.TelemetryOptions{ExperimentalVAN: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func newVANHarness(t *testing.T, configure func(*vanSession, *vanTestLink)) *van
 		configure(session, link)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	h := &vanHarness{t: t, session: session, link: link, notifications: make(chan Notification, 64), updates: make(chan observed.Update, 64), done: make(chan error, 1), cancel: cancel}
+	h := &vanHarness{t: t, session: session, link: link, notifications: make(chan device.Notification, 64), updates: make(chan observed.Update, 64), done: make(chan error, 1), cancel: cancel}
 	go func() {
 		h.done <- session.Run(ctx, link, h.notifications, func(u observed.Update) { h.updates <- u })
 		close(h.done)
@@ -83,7 +83,7 @@ func newVANHarness(t *testing.T, configure func(*vanSession, *vanTestLink)) *van
 
 func (h *vanHarness) checkSafeWrite(write vanWrite) {
 	h.t.Helper()
-	if write.uuid != protocol.WriteCharUUID || (!bytes.Equal(write.data, []byte{0xf0, 0xc0, 0, 0xb0}) && !bytes.Equal(write.data, vanPacket(0xc1, 0, h.session.unit)) && !bytes.Equal(write.data, []byte{0xf0, 0xc3, 3, 0, 0, 0, 0xb6})) {
+	if write.uuid != writeUUID || (!bytes.Equal(write.data, []byte{0xf0, 0xc0, 0, 0xb0}) && !bytes.Equal(write.data, vanPacket(0xc1, 0, h.session.unit)) && !bytes.Equal(write.data, []byte{0xf0, 0xc3, 3, 0, 0, 0, 0xb6})) {
 		h.t.Errorf("unsafe telemetry write %s %x", write.uuid, write.data)
 	}
 }
@@ -102,7 +102,7 @@ func (h *vanHarness) write(want []byte) {
 }
 
 func (h *vanHarness) send(data []byte) {
-	h.notifications <- Notification{UUID: protocol.NotifyCharUUID, Data: data}
+	h.notifications <- device.Notification{UUID: notifyUUID, Data: data}
 }
 
 func (h *vanHarness) update() observed.Update {
@@ -142,20 +142,20 @@ func (h *vanHarness) handshake() {
 func TestVANSyntheticHandshakeOrderingAndUnits(t *testing.T) {
 	h := newVANHarness(t, func(s *vanSession, _ *vanTestLink) { s.unit = 7 })
 	h.write([]byte{0xf0, 0xc0, 0, 0xb0})
-	if !reflect.DeepEqual(h.session.NotifyUUIDs(), []string{protocol.NotifyCharUUID}) {
+	if !reflect.DeepEqual(h.session.NotifyUUIDs(), []string{notifyUUID}) {
 		t.Fatal("wrong notify characteristic")
 	}
 	uuidCopy := h.session.NotifyUUIDs()
 	uuidCopy[0] = "mutated"
-	if h.session.NotifyUUIDs()[0] != protocol.NotifyCharUUID {
+	if h.session.NotifyUUIDs()[0] != notifyUUID {
 		t.Fatal("notification UUIDs share mutable storage")
 	}
 	// Wrong UUIDs cannot poison reassembly or advance the handshake.
-	h.notifications <- Notification{UUID: protocol.WriteCharUUID, Data: vanPacket(0xd0)}
-	h.notifications <- Notification{UUID: "fff1", Data: []byte{0xf0, 0xd0, 64}}
+	h.notifications <- device.Notification{UUID: writeUUID, Data: vanPacket(0xd0)}
+	h.notifications <- device.Notification{UUID: "fff1", Data: []byte{0xf0, 0xd0, 64}}
 	h.send(vanPacket(0xd1, make([]byte, 7)...))
 	h.send(vanPacket(0xd3, syntheticVANStatus()...))
-	h.notifications <- Notification{UUID: strings.ToUpper(protocol.NotifyCharUUID), Data: vanPacket(0xd0)}
+	h.notifications <- device.Notification{UUID: strings.ToUpper(notifyUUID), Data: vanPacket(0xd0)}
 	h.write([]byte{0xf0, 0xc1, 2, 0, 7, 0xba})
 	select {
 	case update := <-h.updates:
@@ -182,7 +182,7 @@ func TestVANSyntheticHandshakeOrderingAndUnits(t *testing.T) {
 		t.Fatal("unexpected updates or handshake writes")
 	}
 	// Discovery contains field support only; static command limits remain intact.
-	store := observed.NewStore("dft200", CapabilitiesFor(DFT200{}), observed.StoreOptions{})
+	store := observed.NewStore("dft200", device.CapabilitiesFor(Driver{}), observed.StoreOptions{})
 	generation := store.BeginConnection()
 	store.Apply(generation, capUpdate)
 	got := store.Snapshot().Capabilities
@@ -298,7 +298,7 @@ func TestVANCancellationAndNotificationClose(t *testing.T) {
 			if stage == "before Run" {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
-				session, _ := (DFT200{}).NewTelemetry(TelemetryOptions{ExperimentalVAN: true})
+				session, _ := (Driver{}).NewTelemetry(device.TelemetryOptions{ExperimentalVAN: true})
 				// Nil dependencies ensure no write or emit can be admitted.
 				if err := session.Run(ctx, nil, nil, nil); !errors.Is(err, context.Canceled) {
 					t.Fatalf("pre-cancelled Run = %v", err)
@@ -361,11 +361,11 @@ func TestVANCancellationWaitsForSynchronousWrite(t *testing.T) {
 }
 
 func TestVANFreshSessionsAndDefaults(t *testing.T) {
-	first, err := (DFT200{}).NewTelemetry(TelemetryOptions{ExperimentalVAN: true, ExperimentalVANUnit: 1})
+	first, err := (Driver{}).NewTelemetry(device.TelemetryOptions{ExperimentalVAN: true, ExperimentalVANUnit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, _ := (DFT200{}).NewTelemetry(TelemetryOptions{ExperimentalVAN: true})
+	second, _ := (Driver{}).NewTelemetry(device.TelemetryOptions{ExperimentalVAN: true})
 	if first == second || first.(*vanSession).unit != 1 || second.(*vanSession).unit != 0 {
 		t.Fatal("session options leaked between connections")
 	}

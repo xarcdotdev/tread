@@ -122,8 +122,8 @@ internal/agent/     Bluetooth owner process and local socket API
 internal/ownership/ Runtime directory and single-owner lock
 internal/observed/  Live readings model
 internal/ble/       Bluetooth transport
-internal/device/    Device drivers and command encoding
-internal/protocol/  DFT200 packet format
+internal/device/    Driver contract: commands, capabilities, telemetry
+internal/drivers/   Driver registry, one subpackage per device (dft200/)
 internal/config/    TOML settings
 internal/event/     Control events and offline delivery
 internal/control/   Local mode/speed knowledge
@@ -135,7 +135,7 @@ internal/demo/      Mock history
 web/                Plain HTML/CSS/JS dashboard
 ```
 
-To add a device, implement `device.Driver`, register it in `device.Lookup` and update config validation.
+To add a device, implement `device.Driver` in a new `internal/drivers/` subpackage and add it to the registry in `internal/drivers/drivers.go`. Speed levels other than 1–8 aren't supported yet.
 
 ## Development
 

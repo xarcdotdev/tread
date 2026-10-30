@@ -1,4 +1,4 @@
-package device
+package dft200
 
 import (
 	"context"
@@ -6,17 +6,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
-	"github.com/xarcdotdev/oss-treadmill/internal/protocol"
 )
 
-var _ TelemetryProvider = DFT200{}
+var _ device.TelemetryProvider = Driver{}
 
 // NewTelemetry enables only the experimental VAN link/status protocol. It never
 // sends start, stop, pause or speed commands. DFT200 compatibility is unverified.
-func (DFT200) NewTelemetry(options TelemetryOptions) (TelemetrySession, error) {
+func (Driver) NewTelemetry(options device.TelemetryOptions) (device.TelemetrySession, error) {
 	if !options.ExperimentalVAN {
-		return nil, ErrTelemetryDisabled
+		return nil, device.ErrTelemetryDisabled
 	}
 	return &vanSession{
 		unit: options.ExperimentalVANUnit,
@@ -34,18 +34,18 @@ type vanSession struct {
 	responseTimeout  time.Duration
 }
 
-func (*vanSession) NotifyUUIDs() []string { return []string{protocol.NotifyCharUUID} }
+func (*vanSession) NotifyUUIDs() []string { return []string{notifyUUID} }
 
 // Run uses no transport goroutines. Parser, handshake and timers belong to this
 // connection only. Cancellation is checked before admitting writes or updates;
 // an already admitted synchronous Link.Write must finish before Run can return.
-func (s *vanSession) Run(ctx context.Context, link Link, notifications <-chan Notification, emit func(observed.Update)) error {
-	write := func(command byte, payload ...byte) error {
+func (s *vanSession) Run(ctx context.Context, link device.Link, notifications <-chan device.Notification, emit func(observed.Update)) error {
+	write := func(packet []byte) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := link.Write(ctx, protocol.WriteCharUUID, vanPacket(command, payload...)); err != nil {
-			return fmt.Errorf("VAN %02x write: %w", command, err)
+		if err := link.Write(ctx, writeUUID, packet); err != nil {
+			return fmt.Errorf("VAN %02x write: %w", packet[1], err)
 		}
 		return ctx.Err()
 	}
@@ -56,7 +56,7 @@ func (s *vanSession) Run(ctx context.Context, link Link, notifications <-chan No
 		emit(update)
 		return nil
 	}
-	if err := write(0xc0); err != nil {
+	if err := write(vanPacket(0xc0)); err != nil {
 		return err
 	}
 	const (
@@ -88,7 +88,7 @@ func (s *vanSession) Run(ctx context.Context, link Link, notifications <-chan No
 			if stage == awaitD0 {
 				// Drill-enable is always zero. Unit is an opaque experimental
 				// choice and may change device configuration, even for telemetry.
-				if err := write(0xc1, 0, s.unit); err != nil {
+				if err := write(vanPacket(0xc1, 0, s.unit)); err != nil {
 					return err
 				}
 				stage = awaitD1
@@ -104,7 +104,7 @@ func (s *vanSession) Run(ctx context.Context, link Link, notifications <-chan No
 				}
 				stage = linked
 				timeout.Reset(s.responseTimeout)
-				if err := write(0xc3, 0, 0, 0); err != nil {
+				if err := write(command(cmdStatus, 0)); err != nil {
 					return err
 				}
 				ticker = time.NewTicker(s.pollInterval)
@@ -139,14 +139,14 @@ func (s *vanSession) Run(ctx context.Context, link Link, notifications <-chan No
 				return fmt.Errorf("VAN status response timeout awaiting D3")
 			}
 		case <-poll:
-			if err := write(0xc3, 0, 0, 0); err != nil {
+			if err := write(command(cmdStatus, 0)); err != nil {
 				return err
 			}
 		case notification, ok := <-notifications:
 			if !ok {
 				return nil
 			}
-			if !strings.EqualFold(notification.UUID, protocol.NotifyCharUUID) {
+			if !strings.EqualFold(notification.UUID, notifyUUID) {
 				continue
 			}
 			if err := stream.feed(notification.Data, accept); err != nil {

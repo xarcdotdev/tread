@@ -1,4 +1,4 @@
-package device
+package dft200
 
 import "github.com/xarcdotdev/oss-treadmill/internal/observed"
 
