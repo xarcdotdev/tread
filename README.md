@@ -2,6 +2,8 @@
 
 A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. DFT200 support uses a reverse-engineered protocol.
 
+![Dashboard overview with walking time, steps, speed, calories and charts for the past month](docs/images/dashboard.png)
+
 > [!NOTE]
 > This is completed vibe-coded. Use at your own risk.
 
@@ -37,6 +39,8 @@ tread serve   # dashboard and API
 ```
 
 ## Commands
+
+![Starting the treadmill, changing speed, stopping and printing monthly stats](docs/images/cli.gif)
 
 ```sh
 tread start | resume | pause | stop
@@ -114,6 +118,8 @@ yearly:
 
 All entries are optional. Periods are calendar-based (Monday-start weeks) in the configured timezone. The file is reloaded on each request.
 
+![Goals page with daily, weekly, monthly and yearly progress bars](docs/images/goals.png)
+
 ## Structure
 
 ```text
@@ -142,6 +148,13 @@ To add a device, implement `device.Driver` in a new `internal/drivers/` subpacka
 ```sh
 go test ./...
 go vet ./...
+```
+
+The images in `docs/images` come from `scripts/demo`, which runs the agent on a fake Bluetooth backend with generated history:
+
+```sh
+(cd scripts && npm install && npm run screenshots)  # needs Chrome or Chromium
+vhs scripts/cli.tape                                # needs VHS
 ```
 
 ## License

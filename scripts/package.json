@@ -1,0 +1,10 @@
+{
+  "name": "tread-scripts",
+  "private": true,
+  "scripts": {
+    "screenshots": "node screenshots.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.63.0"
+  }
+}
