@@ -46,6 +46,22 @@ func TestFavicon(t *testing.T) {
 	}
 }
 
+func TestDashboardDefaultPeriod(t *testing.T) {
+	data, err := FS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, periods, ok := strings.Cut(string(data), `<div class="segmented periods" aria-label="Statistics period">`)
+	if !ok {
+		t.Fatal("statistics period selector missing")
+	}
+	periods, _, _ = strings.Cut(periods, "</div>")
+	if !strings.Contains(periods, `data-period="1d" aria-pressed="true"`) ||
+		strings.Count(periods, `aria-pressed="true"`) != 1 {
+		t.Fatal("only the daily period must be selected by default")
+	}
+}
+
 func TestDashboardCopyAndSessionIcon(t *testing.T) {
 	assets := make(map[string]string)
 	for _, name := range []string{"index.html", "app.js", "icons.svg"} {

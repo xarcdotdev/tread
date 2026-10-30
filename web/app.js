@@ -20,7 +20,7 @@ const levelColor = (level) =>
   `var(--level-${Math.min(8, Math.max(1, level))})`;
 let configuration,
   report,
-  period = new URLSearchParams(location.search).get("period") || "1m",
+  period = new URLSearchParams(location.search).get("period") || "1d",
   metric = "hours",
   bars = [],
   request;
@@ -392,7 +392,7 @@ async function init() {
       return;
     }
     if (!["all", "3y", "1y", "3m", "1m", "1w", "1d"].includes(period))
-      period = "1m";
+      period = "1d";
     $("today").textContent = dateText(new Date());
     document.querySelectorAll("[data-period]").forEach(
       (b) =>

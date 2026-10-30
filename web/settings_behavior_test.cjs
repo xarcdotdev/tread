@@ -13,7 +13,7 @@ class Element {
     this.classList.remove = this.classList.delete;
   }
 }
-function harness(overview = false, browserTimezone = "UTC") {
+function harness(overview = false, browserTimezone = "UTC", search = "") {
   const ids = overview
     ? ["notices", "today", "refresh", "activity-chart"]
     : ["notices", "personal", "device", "application", "calibration-state", "calibration", "goals-path"];
@@ -34,7 +34,7 @@ function harness(overview = false, browserTimezone = "UTC") {
         : selector === "[data-demo]" ? [demo] : [],
       body: new Element(),
     },
-    location: { search: "" },
+    location: { search },
     URLSearchParams,
     Date: class extends Date {
       constructor(...args) { super(...(args.length ? args : ["2026-06-15T00:30:00Z"])); }
@@ -198,11 +198,20 @@ for (const timezone of ["", "Local", "UTC"]) {
   }
 }
 
-test("overview keeps loading statistics without requesting goals", async () => {
-  const h = harness(true);
-  h.pending.shift().resolve(response(configuration()));
-  await settle();
-  assert.equal(h.pending.length, 1);
-  assert.equal(h.pending[0].url, "/api/stats?period=1m");
-  assert.equal(h.elements.notices.innerHTML, "");
-});
+for (const [search, period] of [
+  ["", "1d"],
+  ["?period=", "1d"],
+  ["?period=invalid", "1d"],
+  ...["all", "3y", "1y", "3m", "1m", "1w", "1d"].map((period) => [
+    `?period=${period}`, period,
+  ]),
+]) {
+  test(`overview loads ${period} statistics without requesting goals for ${JSON.stringify(search)}`, async () => {
+    const h = harness(true, "UTC", search);
+    h.pending.shift().resolve(response(configuration()));
+    await settle();
+    assert.equal(h.pending.length, 1);
+    assert.equal(h.pending[0].url, `/api/stats?period=${period}`);
+    assert.equal(h.elements.notices.innerHTML, "");
+  });
+}
