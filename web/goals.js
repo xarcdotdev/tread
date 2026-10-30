@@ -31,28 +31,7 @@ function goalValue(value, unit) {
 function goalPercent(progress) {
   return Math.max(0, progress);
 }
-// Same key and notices as the overview, so a dismissal applies to both pages.
-const dismissKey = "tread.dismissed-notices";
-const dismissible = {
-  "step-length-estimate": "Steps use an approximate step length",
-};
-function noticeID(message) {
-  return Object.keys(dismissible).find((id) => message.startsWith(dismissible[id]));
-}
-function dismissedNotices() {
-  try {
-    return JSON.parse(localStorage.getItem(dismissKey)) || [];
-  } catch {
-    return [];
-  }
-}
-function dismissNotice(id) {
-  try {
-    localStorage.setItem(dismissKey, JSON.stringify([...new Set([...dismissedNotices(), id])]));
-  } catch {
-    // Without storage the notice still closes for this page view.
-  }
-}
+// Dismissal state comes from notices.js.
 function goalNotice(message) {
   const id = noticeID(message);
   const notice = goalElement("div", undefined, "notice");

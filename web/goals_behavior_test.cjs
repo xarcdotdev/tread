@@ -20,8 +20,10 @@ class Element {
   set textContent(text) { this._text = String(text); this.children = []; }
   get textContent() { return this._text + this.children.map((el) => el.textContent).join(""); }
   set innerHTML(_) { throw new Error("Use textContent, not HTML interpolation"); }
-  append(...elements) { this.children.push(...elements); }
-  replaceChildren(...elements) { this._text = ""; this.children = elements; }
+  append(...elements) { this.adopt(elements); this.children.push(...elements); }
+  replaceChildren(...elements) { this._text = ""; this.adopt(elements); this.children = elements; }
+  adopt(elements) { for (const el of elements) if (el instanceof Element) el.parent = this; }
+  remove() { this.parent.children = this.parent.children.filter((el) => el !== this); }
   setAttribute(key, value) { this.attributes[key] = String(value); }
 }
 function descendants(element, tag) {
@@ -30,7 +32,7 @@ function descendants(element, tag) {
     ...descendants(child, tag),
   ]);
 }
-function harness() {
+function harness(storage = {}) {
   const elements = Object.fromEntries([
     "refresh", "goals-periods", "goals-status", "goals-calendar", "notices",
   ].map((id) => [id, new Element()]));
@@ -45,8 +47,13 @@ function harness() {
       body: new Element("body"),
     },
     fetch: (url, options) => new Promise((resolve, reject) => pending.push({ url, options, resolve, reject })),
+    localStorage: {
+      getItem: (key) => storage[key] ?? null,
+      setItem: (key, value) => { storage[key] = String(value); },
+    },
   });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, "goals.js"), "utf8"), context);
+  for (const file of ["notices.js", "goals.js"])
+    vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
   return { context, elements, pending, device, demo };
 }
 const settle = () => new Promise(setImmediate);
@@ -99,6 +106,28 @@ test("initial loading, accessible uncapped bars, unavailable metrics, placeholde
   assert.equal(el.notices.children.length, 1); // Deduplicate period warnings.
   assert.match(el["goals-periods"].textContent, /example on Configuration/);
   assert.equal(h.device.textContent, report().device);
+});
+
+test("a dismissed step-length notice is stored and stays hidden after refresh", async () => {
+  const storage = {};
+  const h = harness(storage);
+  const withEstimate = () => {
+    const r = report();
+    r.periods[0].warnings.push("Steps use an approximate step length of 41.4% of height.");
+    return r;
+  };
+  h.pending.shift().resolve({ ok: true, json: async () => withEstimate() });
+  await settle();
+  assert.equal(h.elements.notices.children.length, 2);
+  const [close] = descendants(h.elements.notices, "button");
+  close.onclick();
+  assert.equal(h.elements.notices.children.length, 1);
+  assert.equal(storage["tread.dismissed-notices"], '["step-length-estimate"]');
+  h.context.loadGoals();
+  h.pending.shift().resolve({ ok: true, json: async () => withEstimate() });
+  await settle();
+  assert.equal(h.elements.notices.children.length, 1);
+  assert.doesNotMatch(h.elements.notices.textContent, /approximate step length/);
 });
 
 test("refresh errors clear old bars and allow recovery with reloaded metadata", async () => {

@@ -107,3 +107,17 @@ func TestDashboardCopyAndSessionIcon(t *testing.T) {
 		t.Error("steps metric and session row icons must remain unchanged")
 	}
 }
+
+func TestPagesLoadSharedNoticesFirst(t *testing.T) {
+	for page, script := range map[string]string{"index.html": "app.js", "settings.html": "app.js", "goals.html": "goals.js"} {
+		data, err := FS.ReadFile(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		shared := strings.Index(string(data), `<script src="/notices.js" defer></script>`)
+		own := strings.Index(string(data), `<script src="/`+script+`" defer></script>`)
+		if shared < 0 || own < 0 || shared > own {
+			t.Errorf("%s must load notices.js before %s", page, script)
+		}
+	}
+}

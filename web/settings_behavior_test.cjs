@@ -13,7 +13,7 @@ class Element {
     this.classList.remove = this.classList.delete;
   }
 }
-function harness(overview = false, browserTimezone = "UTC", search = "") {
+function harness(overview = false, browserTimezone = "UTC", search = "", storage = {}) {
   const ids = overview
     ? ["notices", "today", "refresh", "activity-chart"]
     : ["notices", "personal", "device", "application", "calibration-state", "calibration", "goals-path"];
@@ -49,8 +49,13 @@ function harness(overview = false, browserTimezone = "UTC", search = "") {
     },
     ResizeObserver: class { observe() {} },
     fetch: (url) => new Promise((resolve, reject) => pending.push({ url, resolve, reject })),
+    localStorage: {
+      getItem: (key) => storage[key] ?? null,
+      setItem: (key, value) => { storage[key] = String(value); },
+    },
   });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, "app.js"), "utf8"), context);
+  for (const file of ["notices.js", "app.js"])
+    vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
   return { context, elements, pending, device, demo };
 }
 test("Overview uses hourly labels and offset-qualified interval tooltips for 1d", () => {
@@ -68,6 +73,15 @@ test("Overview uses hourly labels and offset-qualified interval tooltips for 1d"
   assert.match(fs.readFileSync(path.join(__dirname, "index.html"), "utf8"), /data-period="1d" aria-pressed="true">24 hours/);
 });
 
+test("overview hides a notice dismissed on another page", () => {
+  const h = harness(true, "UTC", "", { "tread.dismissed-notices": '["step-length-estimate"]' });
+  vm.runInContext(
+    `notices(["Steps use an approximate step length of 41.4% of height.", "Calibration warning"])`,
+    h.context,
+  );
+  assert.doesNotMatch(h.elements.notices.innerHTML, /approximate step length/);
+  assert.match(h.elements.notices.innerHTML, /Calibration warning/);
+});
 const settle = () => new Promise(setImmediate);
 const response = (value) => ({ ok: true, json: async () => value });
 function configuration(demo = false) {
