@@ -2,6 +2,12 @@
 
 A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. DFT200 support uses a reverse-engineered protocol.
 
+> [!NOTE]
+> This is completed vibe-coded. Use at your own risk.
+
+> [!WARNING]
+> The server has no authentication and is meant for local use. Don't expose it to the internet.
+
 ## Try the dashboard
 
 ```sh
@@ -44,7 +50,8 @@ tread stats -period 1m     # or -period all -json, -days N
 tread help
 ```
 
-> **Safety:** a speed command can start a stopped belt. Only send movement commands with the belt clear.
+> [!CAUTION]
+> A speed command can start a stopped belt. Only send movement commands with the belt clear.
 
 Commands go through the agent and are sent at most once. "No command sent" is safe to repeat; "Command outcome unknown; do not retry" means check the treadmill first. `tread -direct <command>` bypasses the agent with a short-lived connection (fails while the agent runs).
 
