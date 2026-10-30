@@ -1,18 +1,10 @@
 "use strict";
-const $ = (id) => document.getElementById(id);
+// $, escapeHTML, get and notice dismissal come from common.js.
 const number = (n, digits = 0) =>
   Number(n).toLocaleString(undefined, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
-const escapeHTML = (s) =>
-  String(s ?? "").replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
-      ],
-  );
 const icon = (name) =>
   `<svg class="icon" aria-hidden="true"><use href="/icons.svg#${name}"/></svg>`;
 // Speed levels are ordinal, so each level keeps its own step of one ramp.
@@ -24,13 +16,6 @@ let configuration,
   metric = "hours",
   bars = [],
   request;
-async function get(path) {
-  const r = await fetch(path);
-  if (!r.ok)
-    throw new Error((await r.text()) || `Request failed (${r.status})`);
-  return r.json();
-}
-// Dismissal state comes from notices.js.
 function notices(messages, error = false) {
   const dismissed = dismissedNotices();
   $("notices").innerHTML = messages

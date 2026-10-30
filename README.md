@@ -27,7 +27,7 @@ ln -s "$(pwd)/tread" ~/.local/bin/tread
 cp config.example.toml ~/.config/tread/config.toml
 ```
 
-Edit the config: set `treadmill.mac` (find it with `bluetoothctl`, `scan on`, `devices`), your personal measurements and calibrated speeds. Use `-config <path>` or `TREAD_CONFIG` for another config file, and `TREAD_DB_PATH` to override `db_path` for the SQLite database. `tread config` prints the effective configuration.
+Edit the config: set `treadmill.mac` (find it with `bluetoothctl`, `scan on`, `devices`), your personal measurements and calibrated speeds. Use `-config <path>` or `TREAD_CONFIG` for another config file, `TREAD_DB_PATH` to override `db_path` for the SQLite database, and `TREAD_STATE_DIR` for the usage queue and control state (default: beside the config). Keep the state directory persistent; it can hold usage not yet delivered. `tread config` prints the effective configuration.
 
 Then run these two long-lived processes:
 

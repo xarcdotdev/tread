@@ -108,16 +108,20 @@ func TestDashboardCopyAndSessionIcon(t *testing.T) {
 	}
 }
 
-func TestPagesLoadSharedNoticesFirst(t *testing.T) {
+func TestPagesLoadCommonScriptFirst(t *testing.T) {
 	for page, script := range map[string]string{"index.html": "app.js", "settings.html": "app.js", "goals.html": "goals.js"} {
 		data, err := FS.ReadFile(page)
 		if err != nil {
 			t.Fatal(err)
 		}
-		shared := strings.Index(string(data), `<script src="/notices.js" defer></script>`)
-		own := strings.Index(string(data), `<script src="/`+script+`" defer></script>`)
-		if shared < 0 || own < 0 || shared > own {
-			t.Errorf("%s must load notices.js before %s", page, script)
+		last := -1
+		for _, name := range []string{"common.js", "live.js", script} {
+			at := strings.Index(string(data), `<script src="/`+name+`" defer></script>`)
+			if at <= last {
+				t.Errorf("%s must load common.js, live.js and %s in that order", page, script)
+				break
+			}
+			last = at
 		}
 	}
 }

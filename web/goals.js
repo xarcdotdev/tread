@@ -1,14 +1,13 @@
 "use strict";
 
 // This page is independent of the overview's rolling statistics controls.
+// $, get, numberUpTo and notice dismissal come from common.js.
 const goalElement = (tag, text, className) => {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = text;
   if (className) element.className = className;
   return element;
 };
-const goalNumber = (n, digits = 2) =>
-  Number(n).toLocaleString(undefined, { maximumFractionDigits: digits });
 
 function goalDuration(seconds) {
   const hours = Math.floor(seconds / 3600);
@@ -17,21 +16,20 @@ function goalDuration(seconds) {
   // Truncate rather than round a nearly completed minute/hour up to the target.
   const truncated = Math.floor(remainder * 1000) / 1000;
   const parts = [];
-  if (hours) parts.push(`${goalNumber(hours, 0)}h`);
+  if (hours) parts.push(`${numberUpTo(hours, 0)}h`);
   if (minutes) parts.push(`${minutes}m`);
   if (remainder || !parts.length)
-    parts.push(`${remainder > 0 && truncated === 0 ? "<0.001" : goalNumber(truncated, 3)}s`);
+    parts.push(`${remainder > 0 && truncated === 0 ? "<0.001" : numberUpTo(truncated, 3)}s`);
   return parts.join(" ");
 }
 function goalValue(value, unit) {
   return unit === "seconds"
     ? goalDuration(value)
-    : `${goalNumber(value, unit === "steps" ? 0 : 2)} ${unit}`;
+    : `${numberUpTo(value, unit === "steps" ? 0 : 2)} ${unit}`;
 }
 function goalPercent(progress) {
   return Math.max(0, progress);
 }
-// Dismissal state comes from notices.js.
 function goalNotice(message) {
   const id = noticeID(message);
   const notice = goalElement("div", undefined, "notice");
@@ -70,7 +68,7 @@ function goalMetric(period, metric) {
   }
   const progress = goalPercent(metric.progress);
   // Never label a value below target as 100% due to display rounding.
-  const percent = `${goalNumber(Math.floor(progress * 10) / 10, 1)}%`;
+  const percent = `${numberUpTo(Math.floor(progress * 10) / 10, 1)}%`;
   heading.append(goalElement("span", percent, `goal-percent${progress > 100 ? " over" : progress >= 100 ? " met" : ""}`));
   const values = `${goalValue(metric.current, metric.unit)} / ${goalValue(metric.target, metric.unit)}`;
   row.append(goalElement("p", values, "goal-values"));
@@ -86,8 +84,7 @@ function goalMetric(period, metric) {
   return row;
 }
 function renderGoals(report) {
-  const byID = (id) => document.getElementById(id);
-  byID("goals-calendar").textContent = `Calendar days, Monday-start weeks, months and years in ${report.timezone}. Progress counts walking through now. Unlike the overview, these are not rolling windows.`;
+  $("goals-calendar").textContent = `Calendar days, Monday-start weeks, months and years in ${report.timezone}. Progress counts walking through now. Unlike the overview, these are not rolling windows.`;
   document.querySelectorAll("[data-device]").forEach((el) => (el.textContent = report.device));
   document.querySelectorAll("[data-demo]").forEach((el) => (el.hidden = !report.demo));
   const warnings = new Set();
@@ -108,42 +105,38 @@ function renderGoals(report) {
       for (const metric of period.metrics) card.append(goalMetric(period, metric));
       for (const warning of period.warnings || []) warnings.add(warning);
     }
-    byID("goals-periods").append(card);
+    $("goals-periods").append(card);
   }
   const dismissed = dismissedNotices();
   for (const warning of warnings)
-    if (!dismissed.includes(noticeID(warning))) byID("notices").append(goalNotice(warning));
-  byID("goals-status").textContent = configured
+    if (!dismissed.includes(noticeID(warning))) $("notices").append(goalNotice(warning));
+  $("goals-status").textContent = configured
     ? ""
     : "No goals configured. A missing or empty goals.yaml is fine. See Configuration for the file path and example, then set your targets.";
 }
 async function loadGoals() {
-  const byID = (id) => document.getElementById(id);
-  const refresh = byID("refresh");
+  const refresh = $("refresh");
   if (refresh.dataset.loading) return;
   refresh.dataset.loading = "true";
   refresh.disabled = true;
   document.body.classList.add("loading");
-  byID("goals-periods").replaceChildren();
-  byID("goals-periods").setAttribute("aria-busy", "true");
-  byID("notices").replaceChildren();
-  byID("goals-status").textContent = "Loading goals…";
+  $("goals-periods").replaceChildren();
+  $("goals-periods").setAttribute("aria-busy", "true");
+  $("notices").replaceChildren();
+  $("goals-status").textContent = "Loading goals…";
   try {
-    const response = await fetch("/api/goals", { cache: "no-store" });
-    if (!response.ok)
-      throw new Error((await response.text()) || `Request failed (${response.status})`);
-    renderGoals(await response.json());
+    renderGoals(await get("/api/goals", { cache: "no-store" }));
   } catch (error) {
     // A bad edit must not leave old bars or display misleading zero completion.
-    byID("goals-periods").replaceChildren();
-    byID("notices").replaceChildren(goalElement("div", `Could not load goals: ${error.message}`, "notice error"));
-    byID("goals-status").textContent = "Progress is unavailable. Fix the file on the server, then Refresh.";
+    $("goals-periods").replaceChildren();
+    $("notices").replaceChildren(goalElement("div", `Could not load goals: ${error.message}`, "notice error"));
+    $("goals-status").textContent = "Progress is unavailable. Fix the file on the server, then Refresh.";
   } finally {
     delete refresh.dataset.loading;
     refresh.disabled = false;
-    byID("goals-periods").setAttribute("aria-busy", "false");
+    $("goals-periods").setAttribute("aria-busy", "false");
     document.body.classList.remove("loading");
   }
 }
-document.getElementById("refresh").onclick = loadGoals;
+$("refresh").onclick = loadGoals;
 loadGoals();

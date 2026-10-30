@@ -54,7 +54,7 @@ function harness(overview = false, browserTimezone = "UTC", search = "", storage
       setItem: (key, value) => { storage[key] = String(value); },
     },
   });
-  for (const file of ["notices.js", "app.js"])
+  for (const file of ["common.js", "app.js"])
     vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
   return { context, elements, pending, device, demo };
 }

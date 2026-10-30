@@ -18,23 +18,13 @@
     incline: "Incline",
     pulse: "Pulse",
   };
-  const escape = (s) =>
-    String(s ?? "").replace(
-      /[&<>"']/g,
-      (c) =>
-        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-          c
-        ],
-    );
   function reading(m) {
     if (m.unit === "s") {
       const t = Math.round(m.value);
       return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
     }
-    const n = Number(m.value).toLocaleString(undefined, {
-      maximumFractionDigits: 2,
-    });
-    return m.unit === "unknown" ? n : `${n}<small>${escape(m.unit)}</small>`;
+    const n = numberUpTo(m.value);
+    return m.unit === "unknown" ? n : `${n}<small>${escapeHTML(m.unit)}</small>`;
   }
   async function poll() {
     let live;
@@ -55,7 +45,7 @@
     document
       .querySelectorAll("[data-link-label]")
       .forEach((el) => (el.textContent = linkText[link] || link));
-    const panel = document.getElementById("live");
+    const panel = $("live");
     if (!panel) return;
     const active = s && s.connection === "connected" && s.telemetry === "active";
     panel.hidden = !active;
@@ -69,7 +59,7 @@
       if (m && m.value !== null && m.value !== undefined)
         stats.push([reading(m), label, m.stale]);
     }
-    document.getElementById("live-stats").innerHTML = stats
+    $("live-stats").innerHTML = stats
       .map(
         ([value, label, stale]) =>
           `<div class="stat${stale ? " stale" : ""}"><strong>${value}</strong><span>${label}${stale ? " · stale" : ""}</span></div>`,

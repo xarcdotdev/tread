@@ -117,6 +117,22 @@ func TestDBPathEnv(t *testing.T) {
 	}
 }
 
+func TestStateDirEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	t.Setenv("TREAD_STATE_DIR", "")
+	if cfg, err := LoadFile(path); err != nil || cfg.QueuePath() != filepath.Join(dir, "queue.jsonl") {
+		t.Fatalf("default queue: %q, %v", cfg.QueuePath(), err)
+	}
+	t.Setenv("TREAD_STATE_DIR", "/var/lib/tread")
+	if cfg, err := LoadFile(path); err != nil || cfg.QueuePath() != "/var/lib/tread/queue.jsonl" {
+		t.Fatalf("env queue: %q, %v", cfg.QueuePath(), err)
+	}
+	if got := (Config{Path: path}).QueuePath(); got != filepath.Join(dir, "queue.jsonl") {
+		t.Fatalf("constructed queue: %q", got)
+	}
+}
+
 func TestLoadAddresses(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, listen, serverURL string

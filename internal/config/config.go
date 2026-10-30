@@ -40,6 +40,7 @@ type Config struct {
 	Device    string    `toml:"device" json:"device"`
 	Listen    string    `toml:"listen" json:"listen"`
 	DBPath    string    `toml:"db_path" json:"db_path"`
+	StateDir  string    `toml:"-" json:"state_dir"` // usage queue and control state
 	Timezone  string    `toml:"timezone" json:"timezone"`
 	Personal  Personal  `toml:"personal" json:"personal"`
 	Treadmill Treadmill `toml:"treadmill" json:"treadmill"`
@@ -91,6 +92,9 @@ func LoadFile(path string) (Config, error) {
 	}
 	if db := os.Getenv("TREAD_DB_PATH"); db != "" {
 		c.DBPath = db
+	}
+	if c.StateDir = os.Getenv("TREAD_STATE_DIR"); c.StateDir == "" {
+		c.StateDir = filepath.Dir(path)
 	}
 	if c.Treadmill.MAC == "" {
 		c.Treadmill.MAC = c.MAC
@@ -189,4 +193,12 @@ func (p Personal) ageAt(now time.Time) (int, error) {
 }
 
 func (c Config) Location() *time.Location { l, _ := time.LoadLocation(c.Timezone); return l }
-func (c Config) QueuePath() string        { return filepath.Join(filepath.Dir(c.Path), "queue.jsonl") }
+
+// QueuePath falls back to the config's directory for configs not built by LoadFile.
+func (c Config) QueuePath() string {
+	dir := c.StateDir
+	if dir == "" {
+		dir = filepath.Dir(c.Path)
+	}
+	return filepath.Join(dir, "queue.jsonl")
+}

@@ -52,7 +52,7 @@ function harness(storage = {}) {
       setItem: (key, value) => { storage[key] = String(value); },
     },
   });
-  for (const file of ["notices.js", "goals.js"])
+  for (const file of ["common.js", "goals.js"])
     vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
   return { context, elements, pending, device, demo };
 }
