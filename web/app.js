@@ -87,8 +87,19 @@ function dateText(d) {
     timeZone: timeZone(),
   }).format(new Date(d));
 }
-// Buckets are calendar dates in the configured timezone; format them as-is.
+// Hourly keys are instants; daily keys are civil dates, formatted as-is.
 function bucketText(key, monthly, long) {
+  if (report?.period === "1d") {
+    const options = {
+      hour: "2-digit", minute: "2-digit", timeZone: timeZone(),
+      ...(long ? { month: "short", day: "numeric", timeZoneName: "shortOffset" } : {}),
+    };
+    const format = new Intl.DateTimeFormat(undefined, options);
+    const start = new Date(key);
+    return long
+      ? `${format.format(start)} – ${format.format(new Date(start.getTime() + 3600000))}`
+      : format.format(start);
+  }
   const [y, m, d] = key.split("-").map(Number);
   return new Intl.DateTimeFormat(
     undefined,
@@ -242,7 +253,7 @@ function drawChart() {
   chart.dataset.digits = digits;
   chart.setAttribute(
     "aria-label",
-    `${monthly ? "Monthly" : "Daily"} ${unit}, ${entries.length} periods. Total ${available ? number(report.totals[metric], 1) : "unavailable"}.`,
+    `${report.period === "1d" ? "Hourly" : monthly ? "Monthly" : "Daily"} ${unit}, ${entries.length} periods. Total ${available ? number(report.totals[metric], 1) : "unavailable"}.`,
   );
   $("chart-tooltip").hidden = true;
   document

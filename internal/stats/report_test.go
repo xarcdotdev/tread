@@ -188,7 +188,7 @@ func TestMidnightRollingStartsAndEmptyDays(t *testing.T) {
 			}
 			now, _ := time.ParseInLocation("2006-01-02 15:04", date+" 12:00", cfg.Location())
 			start, err := PeriodStart("1d", now, cfg.Location())
-			if err != nil || start.Format("2006-01-02 15:04") != date+" 01:00" {
+			if err != nil || now.Sub(start) != 24*time.Hour {
 				t.Fatalf("%v %v", start, err)
 			}
 			week, _ := PeriodStart("1w", now, cfg.Location())

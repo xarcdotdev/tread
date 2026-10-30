@@ -53,6 +53,21 @@ function harness(overview = false, browserTimezone = "UTC", search = "") {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "app.js"), "utf8"), context);
   return { context, elements, pending, device, demo };
 }
+test("Overview uses hourly labels and offset-qualified interval tooltips for 1d", () => {
+  const h = harness(true, Intl.DateTimeFormat().resolvedOptions().timeZone);
+  vm.runInContext(`configuration = { timezone: "Europe/Berlin" }; report = { period: "1d" };`, h.context);
+  const text = (key, long = false) => vm.runInContext(`bucketText(${JSON.stringify(key)}, false, ${long})`, h.context);
+  assert.match(text("2026-10-25T00:30:00Z"), /02:30/);
+  const first = text("2026-10-25T00:30:00Z", true);
+  const second = text("2026-10-25T01:30:00Z", true);
+  assert.notEqual(first, second);
+  assert.match(first, /GMT\+2.*–.*GMT\+1/);
+  assert.match(second, /GMT\+1/);
+  vm.runInContext(`report = { period: "1w" };`, h.context);
+  assert.equal(text("2026-10-25"), new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(2026, 9, 25)));
+  assert.match(fs.readFileSync(path.join(__dirname, "index.html"), "utf8"), /data-period="1d" aria-pressed="true">24 hours/);
+});
+
 const settle = () => new Promise(setImmediate);
 const response = (value) => ({ ok: true, json: async () => value });
 function configuration(demo = false) {

@@ -88,7 +88,7 @@ func PeriodStart(period string, now time.Time, loc *time.Location) (time.Time, e
 	case "1w":
 		return resolve(day.AddDate(0, 0, -6)), nil
 	case "1d":
-		return resolve(day), nil
+		return n.Add(-24 * time.Hour), nil
 	}
 	return time.Time{}, fmt.Errorf("period must be all, 3y, 1y, 3m, 1m, 1w or 1d")
 }
@@ -162,14 +162,21 @@ func Build(events []event.Event, now, from time.Time, period string, cfg config.
 				}
 				for a.Before(b) {
 					local := a.In(cfg.Location())
-					midnight := CalendarBoundary(local.Year(), local.Month(), local.Day()+1, cfg.Location())
+					boundary := CalendarBoundary(local.Year(), local.Month(), local.Day()+1, cfg.Location())
+					date := local.Format(time.DateOnly)
+					if period == "1d" {
+						// Elapsed-hour intervals anchored at from, not civil hours:
+						// DST gaps and overlaps still produce exactly 24 buckets.
+						start := from.Add(a.Sub(from).Truncate(time.Hour))
+						boundary = start.Add(time.Hour)
+						date = start.UTC().Format(time.RFC3339Nano)
+					}
 					end := b
-					if midnight.Before(end) {
-						end = midnight
+					if boundary.Before(end) {
+						end = boundary
 					}
 					h := end.Sub(a).Hours()
 					km := h * span.KMH
-					date := local.Format(time.DateOnly)
 					bucket := dayMap[date]
 					if bucket == nil {
 						bucket = &Bucket{Date: date}
@@ -202,29 +209,7 @@ func Build(events []event.Event, now, from time.Time, period string, cfg config.
 			}
 		}
 	}
-	// Include zero days so gaps are visible in the activity graph.
-	start := from
-	if period == "all" {
-		start = now
-		for _, d := range dayMap {
-			civil, _ := time.Parse(time.DateOnly, d.Date)
-			t := CalendarBoundary(civil.Year(), civil.Month(), civil.Day(), cfg.Location())
-			if t.Before(start) {
-				start = t
-			}
-		}
-	}
-	n := start.In(cfg.Location())
-	start = time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
-	for d := start; ; d = d.AddDate(0, 0, 1) {
-		boundary := CalendarBoundary(d.Year(), d.Month(), d.Day(), cfg.Location())
-		if boundary.After(now) {
-			break
-		}
-		key := d.Format(time.DateOnly)
-		if boundary.Format(time.DateOnly) != key {
-			continue // A wholly skipped local date has no bucket.
-		}
+	appendBucket := func(key string) {
 		bucket := dayMap[key]
 		if bucket == nil {
 			bucket = &Bucket{Date: key}
@@ -236,6 +221,37 @@ func Build(events []event.Event, now, from time.Time, period string, cfg config.
 		r.Totals.Hours += bucket.Hours
 		r.Totals.DistanceKM += bucket.DistanceKM
 		r.Totals.Calories += bucket.Calories
+	}
+	if period == "1d" {
+		for d := from; d.Before(now); d = d.Add(time.Hour) {
+			appendBucket(d.UTC().Format(time.RFC3339Nano))
+		}
+	} else {
+		// Include zero days so gaps are visible in the activity graph.
+		start := from
+		if period == "all" {
+			start = now
+			for _, d := range dayMap {
+				civil, _ := time.Parse(time.DateOnly, d.Date)
+				t := CalendarBoundary(civil.Year(), civil.Month(), civil.Day(), cfg.Location())
+				if t.Before(start) {
+					start = t
+				}
+			}
+		}
+		n := start.In(cfg.Location())
+		start = time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+		for d := start; ; d = d.AddDate(0, 0, 1) {
+			boundary := CalendarBoundary(d.Year(), d.Month(), d.Day(), cfg.Location())
+			if boundary.After(now) {
+				break
+			}
+			key := d.Format(time.DateOnly)
+			if boundary.Format(time.DateOnly) != key {
+				continue // A wholly skipped local date has no bucket.
+			}
+			appendBucket(key)
+		}
 	}
 	if r.Totals.Hours > 0 {
 		r.Totals.AverageSpeed = r.Totals.DistanceKM / r.Totals.Hours
