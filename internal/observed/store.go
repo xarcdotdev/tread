@@ -1,6 +1,7 @@
 package observed
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -125,7 +126,7 @@ func (s *Store) Apply(generation uint64, update Update) bool {
 	}
 	for field, measurement := range update.Measurements {
 		// Unknown keys cannot silently expand the normalized measurement schema.
-		if !measurementField(field) {
+		if !slices.Contains(MeasurementFields, field) {
 			continue
 		}
 		measurement = cloneMeasurement(measurement)
@@ -187,21 +188,13 @@ func (s *Store) invalidate() {
 	s.discovered = Capabilities{}
 	s.snapshot.Capabilities = s.static.Clone()
 	s.snapshot.State = State{Value: StateUnknown, Stale: true}
-	s.snapshot.Measurements = make(map[Field]Measurement, 6)
-	for _, field := range []Field{FieldSpeed, FieldDistance, FieldElapsed, FieldIncline, FieldCalories, FieldPulse} {
+	s.snapshot.Measurements = make(map[Field]Measurement, len(MeasurementFields))
+	for _, field := range MeasurementFields {
 		s.snapshot.Measurements[field] = Measurement{
 			Unit: UnitUnknown, UnitConfidence: UnitUnknownConfidence,
 			DataConfidence: DataExperimental, Stale: true,
 		}
 	}
-}
-
-func measurementField(field Field) bool {
-	switch field {
-	case FieldSpeed, FieldDistance, FieldElapsed, FieldIncline, FieldCalories, FieldPulse:
-		return true
-	}
-	return false
 }
 
 func cloneState(state State) State {
@@ -233,20 +226,12 @@ func cloneTime(timestamp *time.Time) *time.Time {
 func mergeCapabilities(static, discovered Capabilities) Capabilities {
 	out := static.Clone()
 	for _, action := range discovered.Actions {
-		found := false
-		for _, existing := range out.Actions {
-			found = found || existing == action
-		}
-		if !found {
+		if !slices.Contains(out.Actions, action) {
 			out.Actions = append(out.Actions, action)
 		}
 	}
 	for _, field := range discovered.ObservedFields {
-		found := false
-		for _, existing := range out.ObservedFields {
-			found = found || existing == field
-		}
-		if !found {
+		if !slices.Contains(out.ObservedFields, field) {
 			out.ObservedFields = append(out.ObservedFields, field)
 		}
 	}

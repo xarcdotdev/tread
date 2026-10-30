@@ -26,7 +26,7 @@ func TestEventIngestionAndDashboard(t *testing.T) {
 	start := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	stop := time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339)
 	body := `[{"id":"start","device":"desk","action":"start","ts":"` + start + `"},{"id":"stop","device":"desk","action":"stop","ts":"` + stop + `"}]`
-	for n := 0; n < 2; n++ {
+	for range 2 {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, httptest.NewRequest("POST", "/api/events", strings.NewReader(body)))
 		if w.Code != 204 {

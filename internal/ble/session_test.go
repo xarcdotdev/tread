@@ -122,14 +122,12 @@ func TestSerializedWrites(t *testing.T) {
 	f := &fakeConnection{}
 	s := openFake(t, f, 2)
 	var wg sync.WaitGroup
-	for i := 0; i < 40; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 40 {
+		wg.Go(func() {
 			if err := s.Write(context.Background(), "write", []byte{1}); err != nil {
 				t.Error(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if f.max.Load() != 1 {

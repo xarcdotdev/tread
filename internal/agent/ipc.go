@@ -26,6 +26,7 @@ type CommandRequest struct {
 	Action string `json:"action"`
 	Level  *int   `json:"level,omitempty"`
 }
+
 type CommandResponse struct {
 	Result          control.Result `json:"result"`
 	DeliveryPending bool           `json:"delivery_pending"`
@@ -50,6 +51,7 @@ func (r CommandRequest) validate() error {
 	}
 	return nil
 }
+
 func decode(r io.Reader, v any) error {
 	d := json.NewDecoder(r)
 	d.DisallowUnknownFields()
@@ -62,22 +64,24 @@ func decode(r io.Reader, v any) error {
 	}
 	return nil
 }
+
 func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
+
 func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 	fail := func(status int, err string) { respond(w, status, CommandResponse{Error: err}) }
 	if r.URL.RawQuery != "" {
-		fail(400, "queries not allowed")
+		fail(http.StatusBadRequest, "queries not allowed")
 		return
 	}
 	command := r.Method == "POST" && r.URL.Path == "/v1/command"
 	snapshot := r.Method == "GET" && r.URL.Path == "/v1/observed"
 	syncUsage := r.Method == "POST" && r.URL.Path == "/v1/sync"
 	if !command && !snapshot && !syncUsage {
-		fail(404, "unknown endpoint")
+		fail(http.StatusNotFound, "unknown endpoint")
 		return
 	}
 	var req CommandRequest
@@ -87,41 +91,41 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 		var fields map[string]json.RawMessage
 		b, err := io.ReadAll(body)
 		if err != nil {
-			fail(400, "request too large")
+			fail(http.StatusBadRequest, "request too large")
 			return
 		}
 		if err = decode(bytes.NewReader(b), &req); err != nil {
-			fail(400, err.Error())
+			fail(http.StatusBadRequest, err.Error())
 			return
 		}
 		if err = json.Unmarshal(b, &fields); err != nil {
-			fail(400, err.Error())
+			fail(http.StatusBadRequest, err.Error())
 			return
 		}
 		if level, ok := fields["level"]; ok && (req.Action != "speed" || string(level) == "null") {
-			fail(400, "level is allowed only for speed and must be an integer")
+			fail(http.StatusBadRequest, "level is allowed only for speed and must be an integer")
 			return
 		}
 		if err = req.validate(); err != nil {
-			fail(400, err.Error())
+			fail(http.StatusBadRequest, err.Error())
 			return
 		}
 	} else {
 		b, err := io.ReadAll(body)
 		if err != nil || len(b) != 0 {
-			fail(400, "body not allowed")
+			fail(http.StatusBadRequest, "body not allowed")
 			return
 		}
 	}
 	h.mu.Lock()
 	if h.stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
 		h.mu.Unlock()
-		fail(503, "agent stopping")
+		fail(http.StatusServiceUnavailable, "agent stopping")
 		return
 	}
 	if command && h.busy {
 		h.mu.Unlock()
-		fail(409, "command already in progress; not queued")
+		fail(http.StatusConflict, "command already in progress; not queued")
 		return
 	}
 	session := h.active
@@ -147,12 +151,12 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 	}()
 	if command && session == nil && req.Action != "reset-state" {
 		if session = h.waitActive(r.Context()); session == nil {
-			fail(503, "device unavailable; no command sent")
+			fail(http.StatusServiceUnavailable, "device unavailable; no command sent")
 			return
 		}
 	}
 	if snapshot {
-		respond(w, 200, h.store.Snapshot())
+		respond(w, http.StatusOK, h.store.Snapshot())
 		return
 	}
 	service := h.service(session)
@@ -162,7 +166,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			out.Error = err.Error()
 		}
-		respond(w, 200, out)
+		respond(w, http.StatusOK, out)
 		return
 	}
 	level := 0
@@ -173,7 +177,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 	stopping := h.stopping
 	h.mu.Unlock()
 	if stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
-		fail(503, "request canceled; no command sent")
+		fail(http.StatusServiceUnavailable, "request canceled; no command sent")
 		return
 	}
 	result, err := service.Execute(req.Action, level)
@@ -182,7 +186,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 		out.Error = err.Error()
 		out.OutcomeUnknown = strings.Contains(out.Error, "unknown") || strings.Contains(out.Error, "command sent;")
 	}
-	respond(w, 200, out)
+	respond(w, http.StatusOK, out)
 }
 
 // notSent marks failures where the request certainly never reached a command
@@ -208,7 +212,7 @@ func validatePath(dir string) error {
 		return errors.New("runtime directory must be absolute")
 	}
 	path := "/"
-	for _, part := range strings.Split(filepath.Clean(dir), "/") {
+	for part := range strings.SplitSeq(filepath.Clean(dir), "/") {
 		if part == "" {
 			continue
 		}
@@ -239,6 +243,7 @@ func validatePath(dir string) error {
 	}
 	return nil
 }
+
 func (c *Client) request(ctx context.Context, method, path string, body []byte, out any) error {
 	if err := validatePath(c.runtimeDir); err != nil {
 		return &notSent{fmt.Errorf("tread agent not running: %w", err)}
@@ -260,14 +265,13 @@ func (c *Client) request(ctx context.Context, method, path string, body []byte, 
 	req.GetBody = nil
 	resp, err := client.Do(req)
 	if err != nil {
-		var refused *notSent
-		if errors.As(err, &refused) {
+		if refused, ok := errors.AsType[*notSent](err); ok {
 			return refused
 		}
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		// The agent answers non-200 only before executing; its JSON error says why.
 		var refusal CommandResponse
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
@@ -309,8 +313,7 @@ func (c *Client) Execute(ctx context.Context, req CommandRequest) (out CommandRe
 	if err == nil && out.Error == "" && out.Result.Message == "" {
 		err = errors.New("command response lacks a result message")
 	}
-	var refused *notSent
-	if errors.As(err, &refused) {
+	if refused, ok := errors.AsType[*notSent](err); ok {
 		out.Error = refused.Error()
 		if !strings.Contains(out.Error, "no command sent") && !strings.Contains(out.Error, "not queued") {
 			out.Error += "; no command sent"
@@ -327,10 +330,12 @@ func (c *Client) Execute(ctx context.Context, req CommandRequest) (out CommandRe
 	}
 	return
 }
+
 func (c *Client) Snapshot(ctx context.Context) (out observed.Snapshot, err error) {
 	err = c.request(ctx, "GET", "/v1/observed", nil, &out)
 	return
 }
+
 func (c *Client) Sync(ctx context.Context) error {
 	var out CommandResponse
 	if err := c.request(ctx, "POST", "/v1/sync", nil, &out); err != nil {

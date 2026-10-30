@@ -34,11 +34,11 @@ func fixture(t *testing.T) (*Controller, *[][]byte) {
 }
 func execute(t *testing.T, c *Controller, a string, n int) string {
 	t.Helper()
-	msg, err := c.Execute(a, n)
+	r, err := c.Execute(a, n)
 	if err != nil {
 		t.Fatalf("%s: %v", a, err)
 	}
-	return msg
+	return r.Message
 }
 func events(t *testing.T, c *Controller) []event.Event {
 	t.Helper()
@@ -50,7 +50,7 @@ func events(t *testing.T, c *Controller) []event.Event {
 		t.Fatal(err)
 	}
 	var result []event.Event
-	for _, line := range bytes.Split(bytes.TrimSpace(b), []byte("\n")) {
+	for line := range bytes.SplitSeq(bytes.TrimSpace(b), []byte("\n")) {
 		var e event.Event
 		if err := json.Unmarshal(line, &e); err != nil {
 			t.Fatal(err)
@@ -153,7 +153,7 @@ func TestInvalidationsPreservePending(t *testing.T) {
 				c.Config.Treadmill.MAC = ""
 				execute(t, c, "reset-state", 0)
 			case "inflight":
-				if err := writeState(StatePath(c.Config)+".in-flight", s); err != nil {
+				if err := writeState(markerPath(c.Config), s); err != nil {
 					t.Fatal(err)
 				}
 			}

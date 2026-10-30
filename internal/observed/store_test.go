@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-func pointer[T any](value T) *T { return &value }
-
 func TestMissingAndZeroJSON(t *testing.T) {
 	s := NewStore("desk", Capabilities{}, StoreOptions{})
 	assertJSON := func(wantSpeed, wantRaw string) {
@@ -45,8 +43,8 @@ func TestMissingAndZeroJSON(t *testing.T) {
 	assertJSON("null", "null")
 	generation := s.BeginConnection()
 	s.Apply(generation, Update{
-		State:        &State{Value: StatePaused, RawCode: pointer(uint16(0))},
-		Measurements: map[Field]Measurement{FieldSpeed: {Value: pointer(0.0)}},
+		State:        &State{Value: StatePaused, RawCode: new(uint16(0))},
+		Measurements: map[Field]Measurement{FieldSpeed: {Value: new(0.0)}},
 	})
 	assertJSON("0", "0")
 	s.Apply(generation, Update{Measurements: map[Field]Measurement{FieldSpeed: {}}})
@@ -60,10 +58,10 @@ func TestPartialUpdatesAndIndependentFreshness(t *testing.T) {
 	s.SetConnection(generation, ConnectionConnected)
 	s.SetTelemetry(generation, TelemetryActive)
 	s.Apply(generation, Update{
-		State: &State{Value: StateRunning, RawCode: pointer(uint16(3))},
+		State: &State{Value: StateRunning, RawCode: new(uint16(3))},
 		Measurements: map[Field]Measurement{
-			FieldSpeed:    {Value: pointer(3.2)},
-			FieldDistance: {Value: pointer(10.0), Unit: UnitMetres, UnitConfidence: UnitVerified, DataConfidence: DataVerified},
+			FieldSpeed:    {Value: new(3.2)},
+			FieldDistance: {Value: new(10.0), Unit: UnitMetres, UnitConfidence: UnitVerified, DataConfidence: DataVerified},
 		},
 	})
 	initial := s.Snapshot()
@@ -80,7 +78,7 @@ func TestPartialUpdatesAndIndependentFreshness(t *testing.T) {
 	}
 	now = now.Add(4 * time.Second)
 	s.Apply(generation, Update{Measurements: map[Field]Measurement{
-		FieldSpeed: {Value: pointer(4.1), Unit: UnitKMH, UnitConfidence: UnitInferred},
+		FieldSpeed: {Value: new(4.1), Unit: UnitKMH, UnitConfidence: UnitInferred},
 	}})
 	now = now.Add(time.Second)
 	got := s.Snapshot()
@@ -101,7 +99,7 @@ func TestPartialUpdatesAndIndependentFreshness(t *testing.T) {
 	if !got.Measurements[FieldSpeed].Stale || got.Telemetry != TelemetryStale {
 		t.Fatal("idle notification stream did not become stale")
 	}
-	s.Apply(generation, Update{Measurements: map[Field]Measurement{FieldSpeed: {Value: pointer(0.0)}}})
+	s.Apply(generation, Update{Measurements: map[Field]Measurement{FieldSpeed: {Value: new(0.0)}}})
 	if s.Snapshot().Telemetry != TelemetryActive {
 		t.Fatal("fresh zero reading should restore active telemetry")
 	}
@@ -126,8 +124,8 @@ func TestSnapshotsAndInputsAreDetached(t *testing.T) {
 	static.ObservedFields[0] = FieldPulse
 	generation := s.BeginConnection()
 	update := Update{
-		State:        &State{Value: StateRunning, RawCode: pointer(uint16(3))},
-		Measurements: map[Field]Measurement{FieldSpeed: {Value: pointer(3.2)}},
+		State:        &State{Value: StateRunning, RawCode: new(uint16(3))},
+		Measurements: map[Field]Measurement{FieldSpeed: {Value: new(3.2)}},
 		Capabilities: &Capabilities{Actions: []string{"pause"}, ObservedFields: []Field{FieldDistance}},
 	}
 	s.Apply(generation, update)
@@ -163,7 +161,7 @@ func TestConnectionGenerationsInvalidateLiveData(t *testing.T) {
 			s.SetTelemetry(generation, TelemetryActive)
 			update := Update{
 				State:        &State{Value: StateRunning},
-				Measurements: map[Field]Measurement{FieldSpeed: {Value: pointer(3.2)}},
+				Measurements: map[Field]Measurement{FieldSpeed: {Value: new(3.2)}},
 				Capabilities: &Capabilities{Actions: []string{"pause"}, SpeedLevels: &LevelRange{Min: 0, Max: 100, Step: 10}, ObservedFields: []Field{FieldPulse}},
 			}
 			s.Apply(generation, update)
@@ -202,7 +200,7 @@ func TestCapabilityPatchReplacementAndUnknownFields(t *testing.T) {
 		t.Fatal("empty patch changed capabilities or discovery was not deduplicated")
 	}
 	s.Apply(generation, Update{Capabilities: &Capabilities{}, Measurements: map[Field]Measurement{
-		Field("vendor"): {Value: pointer(3.0)},
+		Field("vendor"): {Value: new(3.0)},
 	}})
 	got := s.Snapshot()
 	if len(got.Capabilities.ObservedFields) != 0 || len(got.Capabilities.Actions) != 1 || len(got.Measurements) != 6 {
@@ -214,15 +212,13 @@ func TestStoreConcurrentAccess(t *testing.T) {
 	s := NewStore("desk", Capabilities{}, StoreOptions{})
 	generation := s.BeginConnection()
 	var wg sync.WaitGroup
-	for i := 0; i < 4; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 100; j++ {
-				s.Apply(generation, Update{Measurements: map[Field]Measurement{FieldSpeed: {Value: pointer(float64(j))}}})
+	for range 4 {
+		wg.Go(func() {
+			for j := range 100 {
+				s.Apply(generation, Update{Measurements: map[Field]Measurement{FieldSpeed: {Value: new(float64(j))}}})
 				s.Snapshot()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

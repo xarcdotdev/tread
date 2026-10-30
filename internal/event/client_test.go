@@ -25,7 +25,7 @@ func TestSnapshotAcknowledgementPreservesNewEvents(t *testing.T) {
 	if len(snapshot) != 1 || snapshot[0].ID != a.ID {
 		t.Fatal(snapshot)
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := c.Acknowledge(snapshot); err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +73,7 @@ func TestOfflineDeliveryThenRetry(t *testing.T) {
 	delivered := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !online {
-			http.Error(w, "unavailable", 503)
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		var events []Event
@@ -83,12 +83,19 @@ func TestOfflineDeliveryThenRetry(t *testing.T) {
 		for _, e := range events {
 			delivered[e.ID] = true
 		}
-		w.WriteHeader(204)
+		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL, filepath.Join(t.TempDir(), "nested", "queue.jsonl"))
 	e := New("desk", Start, 0)
-	if err := client.Report(e); err == nil {
+	if err := client.Enqueue(e); err != nil {
+		t.Fatal(err)
+	}
+	batch, err := client.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Post(batch); err == nil {
 		t.Fatal("failed delivery should be reported")
 	}
 	queued, err := client.readQueue()
@@ -96,7 +103,10 @@ func TestOfflineDeliveryThenRetry(t *testing.T) {
 		t.Fatalf("event lost while offline: %v %v", queued, err)
 	}
 	online = true
-	if err := client.Flush(); err != nil {
+	if err := client.Post(batch); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Acknowledge(batch); err != nil {
 		t.Fatal(err)
 	}
 	if !delivered[e.ID] {

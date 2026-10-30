@@ -26,8 +26,8 @@ type Period struct {
 	Warnings    []string  `json:"warnings"`
 }
 
-// Metric.Current remains uncapped; Progress is a percentage of at least 0 that
-// exceeds 100 once the target is surpassed.
+// Metric is one configured target. Current remains uncapped; Progress is a
+// percentage of at least 0 that exceeds 100 once the target is surpassed.
 // Unavailable metrics have zero progress; Current may be a partial estimate.
 type Metric struct {
 	ID        string  `json:"id"`

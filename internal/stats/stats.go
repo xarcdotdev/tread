@@ -58,10 +58,7 @@ func Sessions(events []event.Event, now time.Time, opt Options) []Session {
 		if cur == nil || !running {
 			return
 		}
-		d := t.Sub(since)
-		if d > opt.MaxRunning {
-			d = opt.MaxRunning
-		}
+		d := min(t.Sub(since), opt.MaxRunning)
 		if d > 0 {
 			cur.Walking += d
 			speed := opt.KmhPerLevel(level)

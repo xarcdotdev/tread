@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -107,7 +108,7 @@ func Open(ctx context.Context, backend Backend, opts Options) (*Session, error) 
 	}
 	all := make([]string, 0, len(opts.WriteUUIDs)+len(opts.NotifyUUIDs))
 	seen := make(map[string]bool)
-	for _, u := range append(append([]string{}, opts.WriteUUIDs...), opts.NotifyUUIDs...) {
+	for _, u := range slices.Concat(opts.WriteUUIDs, opts.NotifyUUIDs) {
 		if !seen[u] {
 			all = append(all, u)
 			seen[u] = true
@@ -155,15 +156,22 @@ func (s *Session) Done() <-chan struct{} { return s.done }
 
 // Err returns the fault and any cleanup errors; its final value is available after Done.
 func (s *Session) Err() error { s.mu.Lock(); defer s.mu.Unlock(); return s.err }
+
 func (s *Session) halt(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.haltLocked(err)
+}
+
+// haltLocked requires s.mu.
+func (s *Session) haltLocked(err error) {
 	s.err = errors.Join(s.err, err)
 	if !s.stopping {
 		s.stopping = true
 		close(s.stop)
 	}
 }
+
 func (s *Session) notify(uuid string, data []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -171,17 +179,13 @@ func (s *Session) notify(uuid string, data []byte) {
 		return
 	}
 	if len(data) > 512 {
-		s.err = errors.Join(s.err, ErrOverflow)
-		s.stopping = true
-		close(s.stop)
+		s.haltLocked(ErrOverflow)
 		return
 	}
 	select {
 	case s.notifications <- device.Notification{UUID: uuid, Data: append([]byte(nil), data...)}:
 	default:
-		s.err = errors.Join(s.err, ErrOverflow)
-		s.stopping = true
-		close(s.stop)
+		s.haltLocked(ErrOverflow)
 	}
 }
 
@@ -209,6 +213,7 @@ func (s *Session) Write(ctx context.Context, uuid string, packet []byte) error {
 // Close is idempotent and waits without a timeout. Releasing host ownership
 // before it returns could allow overlapping backend operations.
 func (s *Session) Close() error { s.halt(nil); <-s.done; return s.Err() }
+
 func (s *Session) run() {
 	defer s.cleanup()
 	ticker := time.NewTicker(250 * time.Millisecond)
@@ -248,6 +253,7 @@ func (s *Session) run() {
 		}
 	}
 }
+
 func (s *Session) cleanup() {
 	s.halt(nil)
 	if s.conn != nil {

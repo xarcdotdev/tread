@@ -15,7 +15,7 @@ func ValidateName(name string) error {
 	if len(name) == 0 || len(name) > 253 || net.ParseIP(name) != nil {
 		return fmt.Errorf("invalid hostname %q", name)
 	}
-	for _, label := range strings.Split(name, ".") {
+	for label := range strings.SplitSeq(name, ".") {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return fmt.Errorf("invalid hostname %q", name)
 		}

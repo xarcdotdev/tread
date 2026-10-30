@@ -72,7 +72,7 @@ func Acquire(dir string) (*Lock, error) {
 	if err != nil {
 		return fail(err)
 	}
-	for _, part := range strings.Split(filepath.Clean(dir), "/") {
+	for part := range strings.SplitSeq(filepath.Clean(dir), "/") {
 		if part == "" {
 			continue
 		}

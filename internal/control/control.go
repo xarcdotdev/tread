@@ -11,9 +11,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/xarcdotdev/oss-treadmill/internal/atomicfile"
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
 	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
@@ -25,6 +27,7 @@ type identity struct {
 	Driver string
 	MAC    string
 }
+
 type state struct {
 	Version  int           `json:"version"`
 	Identity identity      `json:"identity"`
@@ -35,7 +38,8 @@ type state struct {
 	Pending  []event.Event `json:"pending,omitempty"`
 }
 
-// Controller's injected transport must send exactly once, without retries.
+// Controller records sent controls. Its injected transport must send exactly
+// once, without retries.
 type Controller struct {
 	Config config.Config
 	Queue  *event.Client
@@ -48,16 +52,22 @@ type Controller struct {
 func StatePath(cfg config.Config) string {
 	return filepath.Join(filepath.Dir(cfg.QueuePath()), "control-state.json")
 }
+
+// markerPath is a separate in-flight marker beside the control state.
+func markerPath(cfg config.Config) string { return StatePath(cfg) + ".in-flight" }
+
 func LinuxBootID() (string, error) {
 	b, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
 	return strings.TrimSpace(string(b)), err
 }
+
 func (c *Controller) save(s state) error {
 	if c.write != nil {
 		return c.write(StatePath(c.Config), s)
 	}
 	return writeState(StatePath(c.Config), s)
 }
+
 func (c *Controller) load() (state, error) {
 	var s state
 	b, err := os.ReadFile(StatePath(c.Config))
@@ -81,7 +91,7 @@ func (c *Controller) load() (state, error) {
 	if err != nil {
 		return s, fmt.Errorf("control state %s: %w; preserve this file and repair/recover its pending events before reset", StatePath(c.Config), err)
 	}
-	if _, err := os.Stat(StatePath(c.Config) + ".in-flight"); err == nil {
+	if _, err := os.Stat(markerPath(c.Config)); err == nil {
 		s.InFlight = true
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return s, err
@@ -125,43 +135,31 @@ type Result struct {
 	Motion  bool
 }
 
-// Execute preserves the message-only interface for local control callers.
-func (c *Controller) Execute(action string, level int) (string, error) {
-	r, err := c.ExecuteResult(action, level)
-	return r.Message, err
-}
-
 // Execute durably records an unknown in-flight state before sending. A successful
 // send is committed together with its event, then transferred to the local queue.
 // The caller may snapshot after Motion, then deliver outside the control lock.
-func (c *Controller) ExecuteResult(action string, level int) (result Result, err error) {
-	message, err := c.execute(action, level, &result.Motion)
-	result.Message = message
-	return result, err
-}
-
-func (c *Controller) execute(action string, level int, motion *bool) (string, error) {
+func (c *Controller) Execute(action string, level int) (Result, error) {
 	s, err := c.recover()
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 	if action == "reset-state" {
 		s.Mode, s.Speed, s.InFlight = "", 0, false
 		if err := c.save(s); err != nil {
-			return "", err
+			return Result{}, err
 		}
 		if err := c.clearMarker(); err != nil {
-			return "", err
+			return Result{}, err
 		}
-		return "Local control state reset; queued events preserved.", nil
+		return Result{Message: "Local control state reset; queued events preserved."}, nil
 	}
 	mac, err := net.ParseMAC(c.Config.Treadmill.MAC)
 	if err != nil || len(mac) != 6 {
-		return "", errors.New("set a valid treadmill.mac in config first")
+		return Result{}, errors.New("set a valid treadmill.mac in config first")
 	}
 	driver, err := device.Lookup(c.Config.Treadmill.Driver)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 	bootFn := c.BootID
 	if bootFn == nil {
@@ -169,7 +167,7 @@ func (c *Controller) execute(action string, level int, motion *bool) (string, er
 	}
 	boot, err := bootFn()
 	if err != nil || strings.TrimSpace(boot) == "" {
-		return "", fmt.Errorf("cannot determine boot ID; no command sent: %v", err)
+		return Result{}, fmt.Errorf("cannot determine boot ID; no command sent: %v", err)
 	}
 	id := identity{c.Config.Device, c.Config.Treadmill.Driver, mac.String()}
 	if s.Identity != id || s.Boot != boot || s.InFlight {
@@ -188,16 +186,16 @@ func (c *Controller) execute(action string, level int, motion *bool) (string, er
 	case "speed-up", "speed-down":
 		// A speed command can start a stopped belt, so require known running mode.
 		if s.Mode != "running" {
-			return "", errors.New("speed adjustment requires known running state; use toggle or start first")
+			return Result{}, errors.New("speed adjustment requires known running state; use toggle or start first")
 		}
 		if s.Speed == 0 {
 			if action == "speed-up" {
-				return "", errors.New("speed-up requires known speed; use speed-down or an explicit speed first")
+				return Result{}, errors.New("speed-up requires known speed; use speed-down or an explicit speed first")
 			}
 			// Unknown speed only ever slows down, to the lowest level.
 			r, err := speedLevels(driver)
 			if err != nil {
-				return "", err
+				return Result{}, err
 			}
 			level, action = r.Min, "speed"
 			break
@@ -205,25 +203,25 @@ func (c *Controller) execute(action string, level int, motion *bool) (string, er
 		var bounded bool
 		level, bounded, err = relativeLevel(driver, s.Speed, action)
 		if err != nil {
-			return "", err
+			return Result{}, err
 		}
 		if bounded {
-			return fmt.Sprintf("Speed already at level %d; no command sent.", s.Speed), nil
+			return Result{Message: fmt.Sprintf("Speed already at level %d; no command sent.", s.Speed)}, nil
 		}
 		action = "speed"
 	}
 	packet, err := driver.Packet(action, level)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 	if c.Send == nil {
-		return "", errors.New("control transport is unavailable")
+		return Result{}, errors.New("control transport is unavailable")
 	}
 	if action == "status" {
 		if err := c.Send(mac.String(), driver.WriteUUID(), packet); err != nil {
-			return "", err
+			return Result{}, err
 		}
-		return "Status query sent. Device telemetry is not decoded.", nil
+		return Result{Message: "Status query sent. Device telemetry is not decoded."}, nil
 	}
 	eventAction := event.Action(action)
 	if action == "resume" {
@@ -231,19 +229,19 @@ func (c *Controller) execute(action string, level int, motion *bool) (string, er
 	}
 	confirmed := event.New(c.Config.Device, eventAction, level)
 	if err := confirmed.Validate(time.Now()); err != nil {
-		return "", fmt.Errorf("no command sent; invalid usage event: %w", err)
+		return Result{}, fmt.Errorf("no command sent; invalid usage event: %w", err)
 	}
 	marker := s
 	marker.Mode, marker.Speed, marker.InFlight = "", 0, true
 	if err := c.save(marker); err != nil {
-		return "", fmt.Errorf("no command sent; local preflight failed: %w", err)
+		return Result{}, fmt.Errorf("no command sent; local preflight failed: %w", err)
 	}
 	// Separate marker survives even a failed directory fsync after commit rename.
-	if err := writeState(StatePath(c.Config)+".in-flight", marker); err != nil {
-		return "", fmt.Errorf("no command sent; in-flight marker failed: %w", err)
+	if err := writeState(markerPath(c.Config), marker); err != nil {
+		return Result{}, fmt.Errorf("no command sent; in-flight marker failed: %w", err)
 	}
 	if err := c.Send(mac.String(), driver.WriteUUID(), packet); err != nil {
-		return "", fmt.Errorf("transport failed; control state is unknown (do not automatically retry): %w", err)
+		return Result{}, fmt.Errorf("transport failed; control state is unknown (do not automatically retry): %w", err)
 	}
 	s.InFlight = false
 	switch action {
@@ -258,33 +256,29 @@ func (c *Controller) execute(action string, level int, motion *bool) (string, er
 	}
 	s.Pending = []event.Event{confirmed}
 	if err := c.save(s); err != nil {
-		return "", fmt.Errorf("command sent; local recording failed: %w; do not automatically retry", err)
+		return Result{}, fmt.Errorf("command sent; local recording failed: %w; do not automatically retry", err)
 	}
 	if err := c.clearMarker(); err != nil {
-		return "", fmt.Errorf("command sent; confirmed event journaled, in-flight cleanup failed: %w", err)
+		return Result{}, fmt.Errorf("command sent; confirmed event journaled, in-flight cleanup failed: %w", err)
 	}
 	if _, err := c.recover(); err != nil {
-		return "", fmt.Errorf("command sent; confirmed event journaled, queue recovery failed: %w", err)
+		return Result{}, fmt.Errorf("command sent; confirmed event journaled, queue recovery failed: %w", err)
 	}
-	*motion = true
-	return fmt.Sprintf("%s sent; usage queued", action), nil
+	return Result{Message: fmt.Sprintf("%s sent; usage queued", action), Motion: true}, nil
 }
 
-// relativeLevel uses optional command metadata, never telemetry or calibration.
+// speedLevels uses optional command metadata, never telemetry or calibration.
 // The journal and usage events retain their legacy level 1-8 contract.
 func speedLevels(driver device.Driver) (*observed.LevelRange, error) {
 	caps := device.CapabilitiesFor(driver)
 	r := caps.SpeedLevels
-	canSpeed := false
-	for _, action := range caps.Actions {
-		canSpeed = canSpeed || action == "speed"
-	}
-	if !canSpeed || r == nil || r.Min < 1 || r.Max < r.Min || r.Step < 1 {
+	if !slices.Contains(caps.Actions, "speed") || r == nil || r.Min < 1 || r.Max < r.Min || r.Step < 1 {
 		return nil, errors.New("relative speed adjustment unsupported; use an explicit speed level")
 	}
 	return r, nil
 }
 
+// relativeLevel steps one level within speedLevels; bounded means no change.
 func relativeLevel(driver device.Driver, speed int, action string) (level int, bounded bool, err error) {
 	r, err := speedLevels(driver)
 	if err != nil {
@@ -306,16 +300,11 @@ func relativeLevel(driver device.Driver, speed int, action string) (level int, b
 }
 
 func (c *Controller) clearMarker() error {
-	path := StatePath(c.Config) + ".in-flight"
+	path := markerPath(c.Config)
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	d, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
+	return atomicfile.SyncDir(filepath.Dir(path))
 }
 
 func writeState(path string, s state) error {
@@ -323,32 +312,5 @@ func writeState(path string, s state) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".control-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(b); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if err = os.Rename(f.Name(), path); err != nil {
-		return err
-	}
-	d, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
+	return atomicfile.Write(path, b)
 }

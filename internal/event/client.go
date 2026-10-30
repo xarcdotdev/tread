@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/xarcdotdev/oss-treadmill/internal/atomicfile"
 )
 
-// Client posts events to the server. Events that can't be delivered
-// are appended to a local queue file and resent on the next Report.
+// Client keeps a durable local queue of events and posts it to the server.
+// Undelivered events stay queued until a later Post and Acknowledge succeed.
 type Client struct {
 	ServerURL string
 	QueuePath string
@@ -23,31 +25,6 @@ type Client struct {
 
 func NewClient(serverURL, queuePath string) *Client {
 	return &Client{ServerURL: serverURL, QueuePath: queuePath, HTTP: &http.Client{Timeout: 5 * time.Second}}
-}
-
-// Report sends queued events plus e. On failure everything stays queued.
-// Report and Flush require exclusive queue access for their entire duration.
-// Concurrent callers should use Snapshot/Post/Acknowledge with external locking.
-func (c *Client) Report(e Event) error {
-	events, err := c.readQueue()
-	if err != nil {
-		return err
-	}
-	events = append(events, e)
-	if err = c.writeQueue(events); err != nil {
-		return err
-	}
-	return c.Flush()
-}
-func (c *Client) Flush() error {
-	events, err := c.Snapshot()
-	if err != nil {
-		return err
-	}
-	if err := c.Post(events); err != nil {
-		return err
-	}
-	return c.Acknowledge(events)
 }
 
 // Snapshot reads an independent batch under the caller's queue lock.
@@ -141,7 +118,7 @@ func (c *Client) writeQueue(events []Event) error {
 		if err != nil {
 			return err
 		}
-		return syncDir(filepath.Dir(c.QueuePath))
+		return atomicfile.SyncDir(filepath.Dir(c.QueuePath))
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -150,29 +127,7 @@ func (c *Client) writeQueue(events []Event) error {
 			return err
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(c.QueuePath), 0o700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(c.QueuePath), ".queue-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(buf.Bytes()); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(f.Name(), c.QueuePath); err != nil {
-		return err
-	}
-	return syncDir(filepath.Dir(c.QueuePath))
+	return atomicfile.Write(c.QueuePath, buf.Bytes())
 }
 
 // Preflight validates and durably rewrites the queue before a physical action.
@@ -209,13 +164,4 @@ func (c *Client) Enqueue(pending ...Event) error {
 		}
 	}
 	return c.writeQueue(events)
-}
-
-func syncDir(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return f.Sync()
 }

@@ -20,6 +20,7 @@ func Config() config.Config {
 	}
 	return c
 }
+
 func Events(now time.Time, loc *time.Location) []event.Event {
 	rng := rand.New(rand.NewSource(42))
 	out := []event.Event{}

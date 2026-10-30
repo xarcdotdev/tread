@@ -29,12 +29,14 @@ type Server struct {
 func New(s *store.Store, cfg config.Config, demo bool) *Server {
 	return &Server{store: s, cfg: cfg, demo: demo}
 }
+
 func (s *Server) settings() (config.Config, error) {
 	if s.demo {
 		return s.cfg, nil
 	}
 	return config.LoadFile(s.cfg.Path)
 }
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/events", s.postEvents)
@@ -44,7 +46,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		c, err := s.settings()
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, configResponse(c, s.demo, time.Now()))
@@ -52,6 +54,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /", http.FileServerFS(web.FS))
 	return mux
 }
+
 func configResponse(c config.Config, demo bool, now time.Time) map[string]any {
 	var age *int
 	if years, ok := c.Personal.AgeAt(now.In(c.Location())); ok {
@@ -166,7 +169,7 @@ func (s *Server) getGoals(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	cfg, err := s.settings()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	now := time.Now()
@@ -178,7 +181,7 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("days"); raw != "" {
 		days, e := strconv.Atoi(raw)
 		if e != nil || days < 1 || days > 36500 {
-			http.Error(w, "days must be 1–36500", 400)
+			http.Error(w, "days must be 1–36500", http.StatusBadRequest)
 			return
 		}
 		n := now.In(cfg.Location())
@@ -186,14 +189,14 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 		err = nil
 	}
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	// Load preceding events too: a session may cross the period boundary.
 	events, err := s.store.Events(time.Unix(0, 0), now.Add(time.Millisecond))
 	if err != nil {
 		log.Printf("load events: %v", err)
-		http.Error(w, "load failed", 500)
+		http.Error(w, "load failed", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, stats.Build(events, now, from, period, cfg))

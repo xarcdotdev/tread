@@ -22,6 +22,7 @@ type Personal struct {
 	Gender      string  `toml:"gender" json:"gender"`
 	StepLengthM float64 `toml:"step_length_m" json:"step_length_m"`
 }
+
 type Treadmill struct {
 	Driver                   string             `toml:"driver" json:"driver"`
 	MAC                      string             `toml:"mac" json:"mac"`
@@ -32,6 +33,7 @@ type Treadmill struct {
 	IdleDisconnectTimeout    string             `toml:"idle_disconnect_timeout" json:"idle_disconnect_timeout"`
 	ExperimentalVANTelemetry bool               `toml:"experimental_van_telemetry" json:"experimental_van_telemetry"`
 }
+
 type Config struct {
 	MAC       string    `toml:"mac" json:"-"` // legacy config
 	ServerURL string    `toml:"server_url" json:"server_url"`
@@ -51,9 +53,24 @@ func Dir() string {
 	}
 	return filepath.Join(d, "tread")
 }
+
 func Default() Config {
-	return Config{Device: "dft200", Listen: "127.0.0.1:18743", ServerURL: "http://127.0.0.1:18743", DBPath: filepath.Join(Dir(), "tread.db"), Timezone: "UTC", Treadmill: Treadmill{IdleDisconnectTimeout: "5m", Driver: "dft200", Name: "Sportstech DFT200", InitialLevel: 1, SpeedKMH: map[string]float64{}}}
+	return Config{
+		Device:    "dft200",
+		Listen:    "127.0.0.1:18743",
+		ServerURL: "http://127.0.0.1:18743",
+		DBPath:    filepath.Join(Dir(), "tread.db"),
+		Timezone:  "UTC",
+		Treadmill: Treadmill{
+			IdleDisconnectTimeout: "5m",
+			Driver:                "dft200",
+			Name:                  "Sportstech DFT200",
+			InitialLevel:          1,
+			SpeedKMH:              map[string]float64{},
+		},
+	}
 }
+
 func Load() (Config, error) {
 	path := os.Getenv("TREAD_CONFIG")
 	if path == "" {
@@ -61,6 +78,7 @@ func Load() (Config, error) {
 	}
 	return LoadFile(path)
 }
+
 func LoadFile(path string) (Config, error) {
 	c := Default()
 	c.Path = path
@@ -76,6 +94,7 @@ func LoadFile(path string) (Config, error) {
 	}
 	return c, c.Validate()
 }
+
 func (c Config) Validate() error { return c.validate(time.Now()) }
 
 // IdleDisconnectDuration also supplies the default for programmatically built configs.

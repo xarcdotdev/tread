@@ -4,7 +4,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -203,6 +202,7 @@ func (h *host) connections(ctx context.Context, driver device.Driver, opts Optio
 		}
 	}
 }
+
 func (h *host) connection(ctx context.Context, session *ble.Session, telemetry device.TelemetrySession, generation uint64) error {
 	protocolCtx, cancel := context.WithCancel(ctx)
 	finished := make(chan error, 1)
@@ -320,7 +320,7 @@ func (h *host) waitActive(ctx context.Context) *ble.Session {
 func (h *host) service(session *ble.Session) *control.Service {
 	return &control.Service{Controller: &control.Controller{Config: h.cfg, Queue: event.NewClient(h.cfg.ServerURL, h.cfg.QueuePath()), Send: func(_, uuid string, packet []byte) error {
 		if session == nil {
-			return fmt.Errorf("device unavailable; no command sent")
+			return errors.New("device unavailable; no command sent")
 		}
 		return session.Write(context.Background(), uuid, packet)
 	}}}

@@ -16,7 +16,7 @@ func (b *tinyGoBackend) Connect(address string) (Connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	dev, err := b.adapter.Connect(bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, bluetooth.ConnectionParams{})
+	dev, err := b.adapter.Connect(bluetooth.Address{MAC: mac}, bluetooth.ConnectionParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -61,9 +61,11 @@ func (c *tinyGoConnection) Discover(uuids []string) error {
 	}
 	return nil
 }
+
 func (c *tinyGoConnection) Subscribe(u string, callback func([]byte)) error {
 	return c.chars[u].EnableNotifications(callback)
 }
+
 func (c *tinyGoConnection) Unsubscribe(u string) error { return c.chars[u].EnableNotifications(nil) }
 func (c *tinyGoConnection) Write(u string, packet []byte) error {
 	n, err := c.chars[u].Write(packet)

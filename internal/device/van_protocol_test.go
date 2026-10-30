@@ -61,7 +61,7 @@ func TestVANSyntheticStatusFields(t *testing.T) {
 }
 
 func TestVANSyntheticStates(t *testing.T) {
-	for raw := 0; raw < 256; raw++ {
+	for raw := range 256 {
 		payload := syntheticVANStatus()
 		payload[11] = byte(raw)
 		got, _ := decodeVANStatus(payload, 0)

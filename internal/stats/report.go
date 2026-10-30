@@ -18,15 +18,18 @@ type Metrics struct {
 	Steps        int64   `json:"steps"`
 	Calories     float64 `json:"calories"`
 }
+
 type Bucket struct {
 	Date string `json:"date"`
 	Metrics
 }
+
 type Pace struct {
 	Level int     `json:"level"`
 	KMH   float64 `json:"kmh"`
 	Hours float64 `json:"hours"`
 }
+
 type Report struct {
 	Period            string    `json:"period"`
 	From              time.Time `json:"from"`
@@ -122,6 +125,7 @@ func resting(p config.Personal, now time.Time) float64 {
 	}
 	return p.WeightKG
 }
+
 func Build(events []event.Event, now, from time.Time, period string, cfg config.Config) Report {
 	r := Report{Period: period, From: from, To: now, Days: []Bucket{}, Sessions: []Session{}, Pace: []Pace{}, Warnings: []string{}, DistanceAvailable: true}
 	opt := DefaultOptions()
@@ -284,9 +288,6 @@ func Build(events []event.Event, now, from time.Time, period string, cfg config.
 func subtractMonths(day time.Time, months int) time.Time {
 	first := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, day.Location()).AddDate(0, -months, 0)
 	last := first.AddDate(0, 1, -1).Day()
-	d := day.Day()
-	if d > last {
-		d = last
-	}
+	d := min(day.Day(), last)
 	return time.Date(first.Year(), first.Month(), d, 0, 0, 0, 0, day.Location())
 }

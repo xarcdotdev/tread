@@ -15,7 +15,7 @@ import (
 
 	"github.com/xarcdotdev/oss-treadmill/internal/ble"
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
-	controls "github.com/xarcdotdev/oss-treadmill/internal/control"
+	"github.com/xarcdotdev/oss-treadmill/internal/control"
 	"github.com/xarcdotdev/oss-treadmill/internal/demo"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
 	"github.com/xarcdotdev/oss-treadmill/internal/server"
@@ -54,6 +54,7 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
 func run(args []string) error {
 	return runWithSetupHost(args, setupHost)
 }
@@ -75,14 +76,12 @@ func runWithSetupHost(args []string, setup func([]string) error) error {
 		return nil
 	}
 	cmd, args := args[0], args[1:]
-	if cmd == "help" {
+	switch cmd {
+	case "help":
 		fmt.Println(usage)
 		return nil
-	}
-	if cmd == "setup-host" {
+	case "setup-host":
 		return setup(args)
-	}
-	switch cmd {
 	case "start", "resume", "pause", "stop", "status", "speed", "toggle", "speed-up", "speed-down", "reset-state":
 		req, err := commandRequest(cmd, args)
 		if err != nil {
@@ -163,14 +162,12 @@ func loadConfig(path string) (config.Config, error) {
 	return cfg, nil
 }
 
-func withLock(cfg config.Config, fn func() error) error {
-	return controls.WithLock(cfg, fn)
+func newController(cfg config.Config) *control.Controller {
+	return &control.Controller{Config: cfg, Queue: event.NewClient(cfg.ServerURL, cfg.QueuePath()), Send: ble.Send}
 }
-func newController(cfg config.Config) *controls.Controller {
-	return &controls.Controller{Config: cfg, Queue: event.NewClient(cfg.ServerURL, cfg.QueuePath()), Send: ble.Send}
-}
-func controlWith(c *controls.Controller, action string, level int) error {
-	out, err := (&controls.Service{Controller: c}).Execute(action, level)
+
+func controlWith(c *control.Controller, action string, level int) error {
+	out, err := (&control.Service{Controller: c}).Execute(action, level)
 	if err != nil {
 		return err
 	}
@@ -178,9 +175,10 @@ func controlWith(c *controls.Controller, action string, level int) error {
 	return nil
 }
 
-func syncUsage(c *controls.Controller) error {
-	return (&controls.Service{Controller: c}).Sync()
+func syncUsage(c *control.Controller) error {
+	return (&control.Service{Controller: c}).Sync()
 }
+
 func serve(cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	mock := fs.Bool("demo", false, "isolated mock history")
@@ -215,6 +213,7 @@ func serve(cfg config.Config, args []string) error {
 	srv := http.Server{Addr: *listen, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	return srv.ListenAndServe()
 }
+
 func showStats(cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("stats", flag.ContinueOnError)
 	period := fs.String("period", "1w", "statistics period")
@@ -242,7 +241,7 @@ func showStats(cfg config.Config, args []string) error {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("server: %s", resp.Status)
 	}
 	var r stats.Report

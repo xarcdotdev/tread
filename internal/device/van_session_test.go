@@ -217,7 +217,7 @@ func TestVANSyntheticPollingAndResponseLoss(t *testing.T) {
 func TestVANSyntheticResponseRefresh(t *testing.T) {
 	h := newVANHarness(t, func(s *vanSession, _ *vanTestLink) { s.responseTimeout = 150 * time.Millisecond })
 	h.handshake()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		time.Sleep(60 * time.Millisecond)
 		h.send(vanPacket(0xd3, make([]byte, 16)...))
 		if update := h.update(); update.Measurements[observed.FieldSpeed].Value == nil || *update.Measurements[observed.FieldSpeed].Value != 0 {

@@ -39,7 +39,7 @@ func (s *Service) Execute(action string, level int) (out ServiceResult, err erro
 	var deliveryErr error
 	err = WithLock(c.Config, func() error {
 		var e error
-		out.Result, e = c.ExecuteResult(action, level)
+		out.Result, e = c.Execute(action, level)
 		if e == nil && out.Result.Motion {
 			batch, deliveryErr = c.Queue.Snapshot()
 		}
@@ -57,6 +57,7 @@ func (s *Service) Execute(action string, level int) (out ServiceResult, err erro
 	}
 	return
 }
+
 func (s *Service) Sync() error {
 	var batch []event.Event
 	if err := WithLock(s.Controller.Config, func() error {
@@ -68,6 +69,7 @@ func (s *Service) Sync() error {
 	}
 	return s.deliver(batch)
 }
+
 func (s *Service) deliver(batch []event.Event) error {
 	if len(batch) == 0 {
 		return nil

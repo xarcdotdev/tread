@@ -45,6 +45,9 @@ const (
 	FieldPulse    Field = "pulse"
 )
 
+// MeasurementFields lists every normalized measurement in display order.
+var MeasurementFields = []Field{FieldSpeed, FieldDistance, FieldElapsed, FieldIncline, FieldCalories, FieldPulse}
+
 type Unit string
 
 const (

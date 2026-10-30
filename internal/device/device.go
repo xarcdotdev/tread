@@ -13,6 +13,7 @@ type Driver interface {
 	Packet(action string, level int) ([]byte, error)
 	WriteUUID() string
 }
+
 type DFT200 struct{}
 
 // Capabilities describes only the implemented command protocol. Experimental
@@ -40,6 +41,7 @@ func (DFT200) Packet(action string, level int) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("unknown command %q", action)
 }
+
 func Lookup(name string) (Driver, error) {
 	if name == "dft200" {
 		return DFT200{}, nil

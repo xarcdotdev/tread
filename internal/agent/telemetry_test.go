@@ -157,8 +157,7 @@ func TestIdleReadingInterruptions(t *testing.T) {
 }
 
 func TestTelemetryReadinessAndLossInvalidation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	backend := &fakeBackend{}
 	session, err := ble.Open(ctx, backend, ble.Options{WriteUUIDs: []string{"write"}, NotifyUUIDs: []string{"notify"}})
 	if err != nil {

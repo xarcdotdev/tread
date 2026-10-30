@@ -18,15 +18,15 @@ import (
 	"time"
 
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
-	controls "github.com/xarcdotdev/oss-treadmill/internal/control"
+	"github.com/xarcdotdev/oss-treadmill/internal/control"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
 )
 
-func fakeController(cfg config.Config) *controls.Controller {
-	return &controls.Controller{Config: cfg, Queue: event.NewClient("", cfg.QueuePath()), BootID: func() (string, error) { return "test-boot", nil }, Send: func(string, string, []byte) error { return nil }}
+func fakeController(cfg config.Config) *control.Controller {
+	return &control.Controller{Config: cfg, Queue: event.NewClient("", cfg.QueuePath()), BootID: func() (string, error) { return "test-boot", nil }, Send: func(string, string, []byte) error { return nil }}
 }
 
-func deliveryController(t *testing.T) *controls.Controller {
+func deliveryController(t *testing.T) *control.Controller {
 	t.Helper()
 	cfg := config.Default()
 	cfg.Path = filepath.Join(t.TempDir(), "config.toml")
@@ -133,7 +133,7 @@ func TestDeliveryReleasesControlLock(t *testing.T) {
 			defer close(release)
 			c.Queue.ServerURL = srv.URL
 			if syncOnly {
-				if err := withLock(c.Config, func() error { _, err := c.Execute("start", 0); return err }); err != nil {
+				if err := control.WithLock(c.Config, func() error { _, err := c.Execute("start", 0); return err }); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -152,7 +152,7 @@ func TestDeliveryReleasesControlLock(t *testing.T) {
 			}
 			physical := make(chan error, 1)
 			go func() {
-				physical <- withLock(c.Config, func() error {
+				physical <- control.WithLock(c.Config, func() error {
 					other := fakeController(c.Config)
 					_, err := other.Execute("pause", 0)
 					return err
@@ -231,7 +231,7 @@ func TestProcessLock(t *testing.T) {
 			t.Fatalf("parent lock not held: %v", err)
 		}
 		fmt.Println("blocked")
-		err = withLock(cfg, func() error {
+		err = control.WithLock(cfg, func() error {
 			c := fakeController(cfg)
 			c.Send = func(string, string, []byte) error {
 				return os.WriteFile(filepath.Join(dir, "sent"), []byte("fake"), 0600)
@@ -255,7 +255,7 @@ func TestProcessLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	child.Stderr = os.Stderr
-	err = withLock(cfg, func() error {
+	err = control.WithLock(cfg, func() error {
 		c := fakeController(cfg)
 		if _, err := c.Execute("start", 0); err != nil {
 			return err

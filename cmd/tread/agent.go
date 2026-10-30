@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"syscall"
 
@@ -116,19 +117,11 @@ func printObserved(w io.Writer, snapshot observed.Snapshot, raw bool) error {
 		return json.NewEncoder(w).Encode(snapshot)
 	}
 	fmt.Fprintf(w, "Device: %s\nConnection: %s\nTelemetry: %s\n", snapshot.Device, snapshot.Connection, snapshot.Telemetry)
-	supported := func(field observed.Field) bool {
-		for _, f := range snapshot.Capabilities.ObservedFields {
-			if f == field {
-				return true
-			}
-		}
-		return false
-	}
 	unavailable := func(field observed.Field) string {
 		if snapshot.Connection == observed.ConnectionDisabled || snapshot.Telemetry == observed.TelemetryDisabled {
 			return "disabled"
 		}
-		if snapshot.Telemetry == observed.TelemetryUnsupported || !supported(field) {
+		if snapshot.Telemetry == observed.TelemetryUnsupported || !slices.Contains(snapshot.Capabilities.ObservedFields, field) {
 			return "unsupported"
 		}
 		return "unknown"
@@ -144,7 +137,7 @@ func printObserved(w io.Writer, snapshot observed.Snapshot, raw bool) error {
 		state += " (stale)"
 	}
 	fmt.Fprintf(w, "State: %s\n", state)
-	for _, field := range []observed.Field{observed.FieldSpeed, observed.FieldDistance, observed.FieldElapsed, observed.FieldIncline, observed.FieldCalories, observed.FieldPulse} {
+	for _, field := range observed.MeasurementFields {
 		m := snapshot.Measurements[field]
 		value := unavailable(field)
 		if m.Value != nil {

@@ -67,7 +67,7 @@ func TestGoalsExampleMatchesFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	var lines []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if !strings.HasPrefix(line, "#") && line != "" {
 			lines = append(lines, line)
 		}
