@@ -1,6 +1,6 @@
 # tread
 
-A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. DFT200 support is based on the reverse-engineered protocol in `../tread-go` and `../dft200-go`.
+A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. DFT200 support uses a reverse-engineered protocol implementation.
 
 ## Try the dashboard
 
@@ -36,7 +36,7 @@ server_url = "http://127.0.0.1:18743"
 
 These settings are independent. Overriding only one does not update the other.
 
-Run `tread serve` for the dashboard if it is not already running. Bare `tread` shows help; controls do not implicitly start a server. No server restart is needed for controller or keybinding changes.
+Run `tread agent` in a separate terminal and leave it running for default Bluetooth controls. Run `tread serve` in another terminal for the dashboard. Bare `tread` shows help; controls do not implicitly start either process. No server restart is needed for controller or keybinding changes.
 
 ### Controls and local state
 
@@ -87,17 +87,11 @@ The agent's lock and socket live in a runtime directory: `TREAD_RUNTIME_DIR` if 
 
 `tread observed [-json]` prints the agent's live snapshot: connection, telemetry status and any readings. `tread serve` reads the same snapshot through `/api/live` without touching Bluetooth. The sidebar shows the link status, and the overview shows a live card while telemetry is active. Readings are what the treadmill reports, kept separate from history, which still comes from sent commands.
 
-Telemetry is off by default. `experimental_van_telemetry = true` enables the decoder recovered from the VAN FIT app (`docs/van-fit-protocol.md`). It works on a DFT200 but remains experimental. With the default unit byte, speed and distance are labelled km/h and km as inferred units: the treadmill's nominal speed, not your calibrated belt speed. The two will disagree.
+Telemetry is off by default. `experimental_van_telemetry = true` enables the decoder recovered from the VAN FIT app. It works on a DFT200 but remains experimental. With the default unit byte, speed and distance are labelled km/h and km as inferred units: the treadmill's nominal speed, not your calibrated belt speed. The two will disagree.
 
 Under `[treadmill]`, `idle_disconnect_timeout = "5m"` disconnects the agent after five minutes of continuously fresh paused state and zero reported speed. Set `"0s"` to disable; restart the agent after changing it. Missing, unknown, running, nonzero or stale readings reset the timer. Without telemetry, there is no automatic disconnect. The decoder recognizes paused state, not a generic stopped state.
 
 The next Bluetooth command, including `status`, reconnects before being sent once. `observed`, dashboard polling, `sync` and `reset-state` do not reconnect. While disconnected, the agent cannot see or wake for activity from the physical remote.
-
-### Hyprland startup
-
-The CLI does not start the server implicitly. On the configured workstation below, the treadmill control wrapper starts or reuses the agent and server user services on the first control-key press; there is no startup at login. The wrapper then sends the requested movement command once, even if the server is unavailable, so offline usage can still queue. A brief readiness check does not retry the command. Normal Hyprland logout stops both services; crashes or forced termination may not. For manual control, use `systemctl --user stop tread.service tread-agent.service`; inspect logs with `journalctl --user -u tread-agent.service -u tread.service`.
-
-The optional browser shortcut below only opens the dashboard URL. It does not start the server.
 
 ### Optional local hostname
 
@@ -116,14 +110,6 @@ Optional Hyprland browser shortcut after hostname setup, using an illustrative k
 ```ini
 bind = SUPER, T, exec, xdg-open http://tread.local:18743
 ```
-
-### Kyria and Hyprland on this workstation
-
-On this workstation, the installed nonrepeating host bindings in `~/.config/hypr/UserConfigs/UserKeybinds.lua` map F14 to `speed-down`, F16 to `toggle`, and F15 to `speed-up`. `~/.config/hypr/UserScripts/TreadmillControl.sh` validates those actions, starts or reuses `tread-agent.service` and `tread.service` with a bounded nonblocking request, waits briefly for a freshly started agent's socket, then invokes `~/.local/bin/tread` once regardless of server availability. It does not retry movement commands; offline usage remains queued. When it starts either service, it sends a notification naming them. Unknown mode makes `toggle` start the belt; with unknown speed, `speed-down` slows to level 1 and `speed-up` fails with an error notification.
-
-This workstation specifically has `~/.config/systemd/user/tread.service` and `tread-agent.service` linked into the dotfiles systemd configuration. They run `~/.local/bin/tread serve` and `~/.local/bin/tread agent` as user services and are not enabled at login. The agent unit has `TimeoutStopSec=10`, because shutdown can block on a stuck Bluetooth call. A native Hyprland shutdown hook stops both on normal logout. Generic installation does not create this service or wrapper behavior.
-
-`~/.local/bin/tread` links to `/home/lman/Code/go/oss-treadmill/tread`; rebuild that ignored binary with `go build -o tread ./cmd/tread` after CLI changes. The Kyria NSL right-bottom three mappings are compiled in `/home/lman/Code/qmk/splitkb_kyria_rev2_base_xarcdev.uf2` but **not flashed**. The keyboard still needs a deliberate firmware flash before those keys emit the new mappings. Host binding installation does not initialize treadmill state; the first toggle press starts the belt.
 
 ## Calibrate statistics
 
@@ -199,6 +185,10 @@ web/               Overview, goals and configuration, plain HTML/CSS/JS
 ```
 
 To add a device, implement `device.Driver`, register it in `device.Lookup`, and update config validation for its supported levels. The CLI and transport use the driver's command bytes and write characteristic. Session calculation and the dashboard use calibrated speeds rather than protocol bytes. Different level ranges or telemetry will need small changes to event validation and the config page. This is a simple extension point, not a plugin framework.
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE). Third-party icons retain their ISC and MIT license notices in [`web/icons.svg`](web/icons.svg).
 
 ## Check
 
