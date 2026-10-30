@@ -1,22 +1,30 @@
 # tread
 
-A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. DFT200 support uses a reverse-engineered protocol.
-
-![Dashboard overview with walking time, steps, speed, calories and charts for the past month](docs/images/dashboard.png)
+A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. Currently supporting DFT200.
 
 > [!NOTE]
 > This is completed vibe-coded. Use at your own risk.
 
-> [!WARNING]
-> The server has no authentication and is meant for local use. Don't expose it to the internet.
+![Dashboard overview with walking time, steps, speed, calories and charts for the past month](docs/images/dashboard.png)
 
 ## Try the dashboard
+
+> [!WARNING]
+> The server has no authentication and is meant for local use. Don't expose it to the internet.
 
 ```sh
 go run ./cmd/tread serve -demo
 ```
 
 Open <http://127.0.0.1:18743>. Demo mode uses generated history in an in-memory database; it never touches Bluetooth or your real data.
+
+## Supported devices
+
+| Device            | `treadmill.driver` | Controls                                  | Speed levels | Live telemetry                                          |
+| ----------------- | ------------------ | ----------------------------------------- | ------------ | ------------------------------------------------------- |
+| Sportstech DFT200 | `dft200`           | start, pause, resume, stop, speed, status | 1–8          | Experimental: speed, distance ([Telemetry](#telemetry)) |
+
+Devices connect over Bluetooth LE through BlueZ. To add a device, implement `device.Driver` in a new `internal/drivers/` subpackage and add it to the registry in `internal/drivers/drivers.go`. Speed levels other than 1–8 aren't supported yet.
 
 ## Setup
 
@@ -42,6 +50,11 @@ tread serve   # dashboard and API
 
 ![Starting the treadmill, changing speed, stopping and printing monthly stats](docs/images/cli.gif)
 
+> [!CAUTION]
+> A speed command can start a stopped belt. Only send movement commands with the belt clear.
+
+Commands go through the agent and are sent at most once. "No command sent" is safe to repeat; "Command outcome unknown; do not retry" means check the treadmill first. `tread -direct <command>` bypasses the agent with a short-lived connection (fails while the agent runs).
+
 ```sh
 tread start | resume | pause | stop
 tread speed <1-8>          # speed level, not km/h
@@ -53,11 +66,6 @@ tread sync                 # retry queued usage delivery
 tread stats -period 1m     # or -period all -json, -days N
 tread help
 ```
-
-> [!CAUTION]
-> A speed command can start a stopped belt. Only send movement commands with the belt clear.
-
-Commands go through the agent and are sent at most once. "No command sent" is safe to repeat; "Command outcome unknown; do not retry" means check the treadmill first. `tread -direct <command>` bypasses the agent with a short-lived connection (fails while the agent runs).
 
 ### Local state
 
@@ -141,8 +149,6 @@ internal/demo/      Mock history
 web/                Plain HTML/CSS/JS dashboard
 ```
 
-To add a device, implement `device.Driver` in a new `internal/drivers/` subpackage and add it to the registry in `internal/drivers/drivers.go`. Speed levels other than 1–8 aren't supported yet.
-
 ## Development
 
 ```sh
@@ -159,4 +165,4 @@ vhs scripts/cli.tape                                # needs VHS
 
 ## License
 
-[Apache License 2.0](LICENSE). Icons are a subset of [Lucide](https://lucide.dev); their licenses are in [`web/icons.svg`](web/icons.svg).
+Licensed under [Apache 2.0](LICENSE). Includes [Lucide](https://lucide.dev) icons; their ISC/MIT license notices are embedded in [`web/icons.svg`](web/icons.svg).

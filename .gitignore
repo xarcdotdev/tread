@@ -1,4 +1,4 @@
-todo.md
+TODO.md
 /tread
 *.db
 *.db-shm
@@ -6,3 +6,5 @@ todo.md
 docs/*
 !docs/images/
 node_modules/
+
+!AGENTS.md

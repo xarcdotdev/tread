@@ -1,0 +1,1 @@
+- Use concise Conventional Commit messages.
