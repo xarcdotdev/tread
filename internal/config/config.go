@@ -55,6 +55,18 @@ func Dir() string {
 	return filepath.Join(d, "tread")
 }
 
+// StateDir returns $XDG_STATE_HOME/tread, else ~/.local/state/tread.
+func StateDir() string {
+	if base := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(base) {
+		return filepath.Join(base, "tread")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return Dir()
+	}
+	return filepath.Join(home, ".local", "state", "tread")
+}
+
 func Default() Config {
 	return Config{
 		Device:    "dft200",
@@ -94,7 +106,7 @@ func LoadFile(path string) (Config, error) {
 		c.DBPath = db
 	}
 	if c.StateDir = os.Getenv("TREAD_STATE_DIR"); c.StateDir == "" {
-		c.StateDir = filepath.Dir(path)
+		c.StateDir = StateDir()
 	}
 	if c.Treadmill.MAC == "" {
 		c.Treadmill.MAC = c.MAC
@@ -194,7 +206,8 @@ func (p Personal) ageAt(now time.Time) (int, error) {
 
 func (c Config) Location() *time.Location { l, _ := time.LoadLocation(c.Timezone); return l }
 
-// QueuePath falls back to the config's directory for configs not built by LoadFile.
+// QueuePath falls back to the config's directory for configs not built by LoadFile,
+// which keeps constructed test configs out of the real state directory.
 func (c Config) QueuePath() string {
 	dir := c.StateDir
 	if dir == "" {

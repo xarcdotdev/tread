@@ -118,11 +118,17 @@ func TestDBPathEnv(t *testing.T) {
 }
 
 func TestStateDirEnv(t *testing.T) {
-	dir := t.TempDir()
+	dir, xdg := t.TempDir(), t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	t.Setenv("TREAD_STATE_DIR", "")
-	if cfg, err := LoadFile(path); err != nil || cfg.QueuePath() != filepath.Join(dir, "queue.jsonl") {
+	t.Setenv("XDG_STATE_HOME", xdg)
+	if cfg, err := LoadFile(path); err != nil || cfg.QueuePath() != filepath.Join(xdg, "tread", "queue.jsonl") {
 		t.Fatalf("default queue: %q, %v", cfg.QueuePath(), err)
+	}
+	t.Setenv("XDG_STATE_HOME", "relative")
+	t.Setenv("HOME", dir)
+	if got := StateDir(); got != filepath.Join(dir, ".local", "state", "tread") {
+		t.Fatalf("home state dir: %q", got)
 	}
 	t.Setenv("TREAD_STATE_DIR", "/var/lib/tread")
 	if cfg, err := LoadFile(path); err != nil || cfg.QueuePath() != "/var/lib/tread/queue.jsonl" {

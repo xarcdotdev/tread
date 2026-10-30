@@ -27,7 +27,7 @@ ln -s "$(pwd)/tread" ~/.local/bin/tread
 cp config.example.toml ~/.config/tread/config.toml
 ```
 
-Edit the config: set `treadmill.mac` (find it with `bluetoothctl`, `scan on`, `devices`), your personal measurements and calibrated speeds. Use `-config <path>` or `TREAD_CONFIG` for another config file, `TREAD_DB_PATH` to override `db_path` for the SQLite database, and `TREAD_STATE_DIR` for the usage queue and control state (default: beside the config). Keep the state directory persistent; it can hold usage not yet delivered. `tread config` prints the effective configuration.
+Edit the config: set `treadmill.mac` (find it with `bluetoothctl`, `scan on`, `devices`), your personal measurements and calibrated speeds. Use `-config <path>` or `TREAD_CONFIG` for another config file, `TREAD_DB_PATH` to override `db_path` for the SQLite database, and `TREAD_STATE_DIR` for the usage queue and control state (default: `~/.local/state/tread`). Keep the state directory persistent; it can hold usage not yet delivered. `tread config` prints the effective configuration.
 
 Then run these two long-lived processes:
 
@@ -59,7 +59,7 @@ Commands go through the agent and are sent at most once. "No command sent" is sa
 
 tread tracks mode and speed from the commands it sends, not from telemetry. `speed-up`/`speed-down` only work once running mode and speed are known: start the belt, then use `speed <n>` or `speed-down` to establish speed.
 
-After a power cycle, remote-control use or suspend, run `tread reset-state` to forget local knowledge. Don't delete the runtime files beside the config; they may hold usage awaiting delivery.
+After a power cycle, remote-control use or suspend, run `tread reset-state` to forget local knowledge. Don't delete the files in the state directory; they may hold usage awaiting delivery.
 
 ### Telemetry
 

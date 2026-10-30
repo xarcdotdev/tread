@@ -274,7 +274,7 @@ func TestSyncRoutesAndDirectIsNetworkOnly(t *testing.T) {
 				w.WriteHeader(status)
 			}))
 			defer server.Close()
-			t.Setenv("TREAD_STATE_DIR", "")
+			t.Setenv("TREAD_STATE_DIR", t.TempDir())
 			path := filepath.Join(t.TempDir(), "config.toml")
 			if err := os.WriteFile(path, []byte("server_url = "+`"`+server.URL+`"`+"\n"), 0600); err != nil {
 				t.Fatal(err)
