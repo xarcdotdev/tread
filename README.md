@@ -36,7 +36,7 @@ Open <http://127.0.0.1:18743>. Demo mode uses generated history in an in-memory 
 | ----------------- | ------------------ | ----------------------------------------- | ------------ | ------------------------------------------------------- |
 | Sportstech DFT200 | `dft200`           | start, pause, resume, stop, speed, status | 1–8          | Experimental: speed, distance ([Telemetry](#telemetry)) |
 
-Devices connect over Bluetooth LE through BlueZ. Speed levels come from the driver, and each speed usage event records the range it was sent with.
+Devices connect over Bluetooth LE through BlueZ. Speed levels come from the driver.
 
 ## Setup
 
