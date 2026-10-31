@@ -24,8 +24,17 @@ func vanPacket(command byte, payload ...byte) []byte {
 	return append(packet, vanChecksum(packet))
 }
 
+// parseVANFrame validates one complete frame: marker, bounded length and checksum.
 func parseVANFrame(data []byte) (vanFrame, bool) {
-	if len(data) < 4 || data[0] != 0xf0 || int(data[2]) > vanMaxPayload || len(data) != int(data[2])+4 || vanChecksum(data[:len(data)-1]) != data[len(data)-1] {
+	if len(data) < 4 || data[0] != 0xf0 {
+		return vanFrame{}, false
+	}
+	payloadLen := int(data[2])
+	if payloadLen > vanMaxPayload || len(data) != payloadLen+4 {
+		return vanFrame{}, false
+	}
+	body, checksum := data[:len(data)-1], data[len(data)-1]
+	if vanChecksum(body) != checksum {
 		return vanFrame{}, false
 	}
 	return vanFrame{command: data[1], payload: data[3 : len(data)-1]}, true

@@ -47,20 +47,25 @@ func Events(now time.Time, loc *time.Location) []event.Event {
 			}
 			level := 2 + rng.Intn(4)
 			duration := time.Duration(25+rng.Intn(65)) * time.Minute
-			add := func(t time.Time, a event.Action, v int) {
-				if !t.After(now) {
-					out = append(out, event.Event{ID: fmt.Sprintf("demo-%d-%d-%s", day, n, a), Device: "dft200", Action: a, Value: v, TS: t.UTC()})
+			// Events after now are omitted so today's demo history stays in the past.
+			add := func(t time.Time, id string, a event.Action, v int) {
+				if t.After(now) {
+					return
 				}
+				out = append(out, event.Event{
+					ID:     fmt.Sprintf("demo-%d-%d-%s", day, n, id),
+					Device: "dft200",
+					Action: a,
+					Value:  v,
+					TS:     t.UTC(),
+				})
 			}
-			add(start, event.Start, 0)
-			add(start, event.Speed, level)
-			add(start.Add(duration/2), event.Pause, 0)
+			add(start, "start", event.Start, 0)
+			add(start, "speed", event.Speed, level)
+			add(start.Add(duration/2), "pause", event.Pause, 0)
 			// Resume gets a distinct ID to preserve both starts in SQLite.
-			resume := event.Event{ID: fmt.Sprintf("demo-%d-%d-resume", day, n), Device: "dft200", Action: event.Start, TS: start.Add(duration/2 + 2*time.Minute).UTC()}
-			if !resume.TS.After(now) {
-				out = append(out, resume)
-			}
-			add(start.Add(duration+2*time.Minute), event.Stop, 0)
+			add(start.Add(duration/2+2*time.Minute), "resume", event.Start, 0)
+			add(start.Add(duration+2*time.Minute), "stop", event.Stop, 0)
 		}
 	}
 	return out

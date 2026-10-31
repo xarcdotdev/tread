@@ -84,7 +84,13 @@ func Open(ctx context.Context, backend Backend, opts Options) (*Session, error) 
 	if backend == nil {
 		backend = newTinyGoBackend()
 	}
-	s := &Session{writes: make(map[string]bool), requests: make(chan writeRequest), notifications: make(chan device.Notification, opts.NotificationBuffer), stop: make(chan struct{}), done: make(chan struct{})}
+	s := &Session{
+		writes:        make(map[string]bool),
+		requests:      make(chan writeRequest),
+		notifications: make(chan device.Notification, opts.NotificationBuffer),
+		stop:          make(chan struct{}),
+		done:          make(chan struct{}),
+	}
 	fail := func(err error) (*Session, error) { s.halt(err); s.cleanup(); return nil, s.Err() }
 	if err := ctx.Err(); err != nil {
 		return fail(err)

@@ -84,10 +84,25 @@ func Run(ctx context.Context, cfg config.Config, opts Options) error {
 	}
 	defer cleanup()
 	idleTimeout, _ := cfg.Treadmill.IdleDisconnectDuration() // validated above; retained for runtime
-	h := &host{ctx: ctx, cfg: cfg, driver: driver, connectWait: opts.ConnectWait, idleTimeout: idleTimeout, wake: make(chan struct{}, 1), store: observed.NewStore(cfg.Device, device.CapabilitiesFor(driver), observed.StoreOptions{})}
+	h := &host{
+		ctx:         ctx,
+		cfg:         cfg,
+		driver:      driver,
+		connectWait: opts.ConnectWait,
+		idleTimeout: idleTimeout,
+		wake:        make(chan struct{}, 1),
+		store:       observed.NewStore(cfg.Device, device.CapabilitiesFor(driver), observed.StoreOptions{}),
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	server := &http.Server{Handler: http.HandlerFunc(h.handle), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 4096}
+	server := &http.Server{
+		Handler:           http.HandlerFunc(h.handle),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       15 * time.Second,
+		MaxHeaderBytes:    4096,
+	}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()
 	linked := make(chan struct{})
@@ -319,11 +334,18 @@ func (h *host) waitActive(ctx context.Context) *ble.Session {
 	}
 }
 
+// service builds a controller whose transport writes through session. A nil
+// session refuses every write, which lets sync run without a device.
 func (h *host) service(session *ble.Session) *control.Service {
-	return &control.Service{Controller: &control.Controller{Config: h.cfg, Queue: event.NewClient(h.cfg.ServerURL, h.cfg.QueuePath()), Send: func(_, uuid string, packet []byte) error {
+	send := func(_, uuid string, packet []byte) error {
 		if session == nil {
 			return errors.New("device unavailable; no command sent")
 		}
 		return session.Write(context.Background(), uuid, packet)
-	}}}
+	}
+	return &control.Service{Controller: &control.Controller{
+		Config: h.cfg,
+		Queue:  event.NewClient(h.cfg.ServerURL, h.cfg.QueuePath()),
+		Send:   send,
+	}}
 }

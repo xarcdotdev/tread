@@ -260,15 +260,21 @@ func (c *Client) request(ctx context.Context, method, path string, body []byte, 
 	if err := validatePath(c.runtimeDir); err != nil {
 		return &notSent{fmt.Errorf("tread agent not running: %w", err)}
 	}
-	transport := &http.Transport{DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", filepath.Join(c.runtimeDir, ownership.SocketName))
+	socket := filepath.Join(c.runtimeDir, ownership.SocketName)
+	dial := func(ctx context.Context, _, _ string) (net.Conn, error) {
+		conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", socket)
 		if err != nil {
 			return nil, &notSent{fmt.Errorf("tread agent not reachable: %w", err)}
 		}
 		return conn, nil
-	}}
+	}
+	transport := &http.Transport{DisableKeepAlives: true, DialContext: dial}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{
+		Transport:     transport,
+		Timeout:       30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	req, err := http.NewRequestWithContext(ctx, method, "http://agent"+path, bytes.NewReader(body))
 	if err != nil {
 		return err
