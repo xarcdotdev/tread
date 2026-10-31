@@ -19,16 +19,28 @@
 
 ![Dashboard overview with walking time, steps, speed, calories and charts for the past month](docs/images/dashboard.png)
 
-## Try the dashboard
+## How it works
 
-> [!WARNING]
-> The server has no authentication and is meant for local use. Don't expose it to the internet.
+```text
+  tread <command>                 browser
+        │ local socket                │
+        ▼                             ▼
+   tread agent ──usage (HTTP)──► tread serve ──► SQLite
+        │
+        │ Bluetooth LE
+        ▼
+    treadmill
+```
+
+`tread agent` is the only process that talks Bluetooth; `tread serve` owns the database and the dashboard. Every command reaches the treadmill at most once. Usage events queue locally and are delivered to the server when it is reachable.
+
+## Try the dashboard
 
 ```sh
 go run ./cmd/tread serve -demo
 ```
 
-Open <http://127.0.0.1:18743>. Demo mode uses generated history in an in-memory database; it never touches Bluetooth or your real data.
+Open <http://127.0.0.1:18743>. Demo mode uses generated history in an in-memory database; it never touches Bluetooth or your real data. The server has no authentication and is meant for local use.
 
 ## Supported devices
 
@@ -55,12 +67,15 @@ cp config.example.toml ~/.config/tread/config.toml
 
 ### Configuration
 
-- Set `treadmill.mac`. Find the MAC with `bluetoothctl`, then `scan on` and `devices`.
-- Set your personal measurements and calibrated speeds in the config.
-- Use `-config <path>` or `TREAD_CONFIG` to select another config file.
-- Set `TREAD_DB_PATH` to override `db_path` for the SQLite database.
-- Set `TREAD_STATE_DIR` to change the usage queue and control state directory (default: `~/.local/state/tread`). Keep this directory persistent; it can hold usage not yet delivered.
-- Run `tread config` to print the effective configuration.
+| Setting                                      | Override                         | Default                                                         |
+| -------------------------------------------- | -------------------------------- | --------------------------------------------------------------- |
+| Config file                                  | `-config <path>`, `TREAD_CONFIG` | `~/.config/tread/config.toml`                                   |
+| `treadmill.mac`                              |                                  | Required. Find it with `bluetoothctl`: `scan on`, `devices`     |
+| `[personal]`, `[treadmill.speed_kmh]`        |                                  | Unset; see [Statistics & calibration](#statistics--calibration) |
+| `db_path` (SQLite database)                  | `TREAD_DB_PATH`                  | `tread.db` beside the config file                               |
+| State directory (usage queue, control state) | `TREAD_STATE_DIR`                | `~/.local/state/tread`                                          |
+
+Keep the state directory persistent; it can hold usage not yet delivered. `tread config` prints the effective configuration.
 
 ### Run
 
@@ -78,19 +93,25 @@ tread serve   # dashboard and API
 > [!CAUTION]
 > A speed command can start a stopped belt. Only send movement commands with the belt clear.
 
-Commands go through the agent and are sent at most once. "No command sent" is safe to repeat; "Command outcome unknown; do not retry" means check the treadmill first. `tread -direct <command>` bypasses the agent with a short-lived connection (fails while the agent runs).
+| Command                                     | What it does                                          |
+| ------------------------------------------- | ----------------------------------------------------- |
+| `tread start` / `resume` / `pause` / `stop` | Control the belt and record usage                     |
+| `tread speed <level>`                       | Set a driver speed level (DFT200: 1–8), not km/h      |
+| `tread speed-up` / `speed-down`             | One level up or down                                  |
+| `tread toggle`                              | Pause if running, otherwise start                     |
+| `tread status`                              | Send a status query                                   |
+| `tread observed [-json]`                    | Live telemetry snapshot from the agent                |
+| `tread stats -period 1m`                    | Usage summary; also `-period all`, `-days N`, `-json` |
+| `tread sync`                                | Retry queued usage delivery                           |
+| `tread reset-state`                         | Forget local mode and speed knowledge                 |
+| `tread help`                                | Full usage                                            |
 
-```sh
-tread start | resume | pause | stop
-tread speed <level>        # driver speed level (DFT200: 1–8), not km/h
-tread toggle               # pause if running, otherwise start
-tread speed-up | speed-down
-tread status
-tread observed [-json]     # live telemetry snapshot from the agent
-tread sync                 # retry queued usage delivery
-tread stats -period 1m     # or -period all -json, -days N
-tread help
-```
+Commands go through the agent and are sent at most once. `tread -direct <command>` bypasses the agent with a short-lived connection and fails while the agent runs.
+
+| Response                                | Meaning                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------- |
+| "No command sent"                       | Nothing reached the treadmill. Safe to repeat.                                  |
+| "Command outcome unknown; do not retry" | The command may have reached the belt. Check the treadmill before sending more. |
 
 ## Statistics & calibration
 
