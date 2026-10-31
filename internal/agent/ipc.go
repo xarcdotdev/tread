@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/xarcdotdev/oss-treadmill/internal/ble"
 	"github.com/xarcdotdev/oss-treadmill/internal/control"
 	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
@@ -72,132 +73,192 @@ func respond(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+func fail(w http.ResponseWriter, status int, err string) {
+	respond(w, status, CommandResponse{Error: err})
+}
+
+// handle routes the private socket API. Every refusal is JSON so the client can
+// tell a refusal before execution from an unknown outcome.
 func (h *host) handle(w http.ResponseWriter, r *http.Request) {
-	fail := func(status int, err string) { respond(w, status, CommandResponse{Error: err}) }
 	if r.URL.RawQuery != "" {
-		fail(http.StatusBadRequest, "queries not allowed")
+		fail(w, http.StatusBadRequest, "queries not allowed")
 		return
 	}
-	command := r.Method == "POST" && r.URL.Path == "/v1/command"
-	snapshot := r.Method == "GET" && r.URL.Path == "/v1/observed"
-	syncUsage := r.Method == "POST" && r.URL.Path == "/v1/sync"
-	if !command && !snapshot && !syncUsage {
-		fail(http.StatusNotFound, "unknown endpoint")
+	switch r.Method + " " + r.URL.Path {
+	case "POST /v1/command":
+		h.handleCommand(w, r)
+	case "GET /v1/observed":
+		h.handleSnapshot(w, r)
+	case "POST /v1/sync":
+		h.handleSync(w, r)
+	default:
+		fail(w, http.StatusNotFound, "unknown endpoint")
+	}
+}
+
+func (h *host) handleSnapshot(w http.ResponseWriter, r *http.Request) {
+	if !rejectBody(w, r) {
 		return
 	}
-	var req CommandRequest
-	body := http.MaxBytesReader(w, r.Body, maxBody)
-	if command {
-		// Reject null levels as well as explicit levels on non-speed actions.
-		var fields map[string]json.RawMessage
-		b, err := io.ReadAll(body)
-		if err != nil {
-			fail(http.StatusBadRequest, "request too large")
-			return
-		}
-		if err = decode(bytes.NewReader(b), &req); err != nil {
-			fail(http.StatusBadRequest, err.Error())
-			return
-		}
-		if err = json.Unmarshal(b, &fields); err != nil {
-			fail(http.StatusBadRequest, err.Error())
-			return
-		}
-		if level, ok := fields["level"]; ok && (req.Action != control.ActionSpeed || string(level) == "null") {
-			fail(http.StatusBadRequest, "level is allowed only for speed and must be an integer")
-			return
-		}
-		if err = req.validate(); err != nil {
-			fail(http.StatusBadRequest, err.Error())
-			return
-		}
-		if req.Level != nil {
-			levels, err := device.SpeedLevels(h.driver)
-			if err == nil && !levels.Contains(*req.Level) {
-				err = fmt.Errorf("speed requires a level %s", levels)
-			}
-			if err != nil {
-				fail(http.StatusBadRequest, err.Error())
-				return
-			}
-		}
-	} else {
-		b, err := io.ReadAll(body)
-		if err != nil || len(b) != 0 {
-			fail(http.StatusBadRequest, "body not allowed")
-			return
-		}
-	}
-	h.mu.Lock()
-	if h.stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
-		h.mu.Unlock()
-		fail(http.StatusServiceUnavailable, "agent stopping")
+	_, release, ok := h.admit(w, r)
+	if !ok {
 		return
 	}
-	if command && h.busy {
-		h.mu.Unlock()
-		fail(http.StatusConflict, "command already in progress; not queued")
+	defer release()
+	respond(w, http.StatusOK, h.store.Snapshot())
+}
+
+func (h *host) handleSync(w http.ResponseWriter, r *http.Request) {
+	if !rejectBody(w, r) {
 		return
 	}
-	session := h.active
-	if command {
-		h.busy = true
-		if req.Action != control.ActionResetState && h.suspended {
-			h.suspended = false
-			select {
-			case h.wake <- struct{}{}:
-			default:
-			}
-		}
+	session, release, ok := h.admit(w, r)
+	if !ok {
+		return
 	}
-	h.work.Add(1)
-	h.mu.Unlock()
-	defer func() {
-		h.mu.Lock()
-		if command {
-			h.busy = false
-		}
-		h.mu.Unlock()
-		h.work.Done()
-	}()
-	if command && session == nil && req.Action != control.ActionResetState {
+	defer release()
+	var out CommandResponse
+	if err := h.service(session).Sync(); err != nil {
+		out.Error = err.Error()
+	}
+	respond(w, http.StatusOK, out)
+}
+
+func (h *host) handleCommand(w http.ResponseWriter, r *http.Request) {
+	req, err := h.parseCommand(w, r)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	session, release, ok := h.admitCommand(w, r, req)
+	if !ok {
+		return
+	}
+	defer release()
+	needsDevice := req.Action != control.ActionResetState
+	if needsDevice && session == nil {
 		if session = h.waitActive(r.Context()); session == nil {
-			fail(http.StatusServiceUnavailable, "device unavailable; no command sent")
+			fail(w, http.StatusServiceUnavailable, "device unavailable; no command sent")
 			return
 		}
 	}
-	if snapshot {
-		respond(w, http.StatusOK, h.store.Snapshot())
-		return
-	}
-	service := h.service(session)
-	if syncUsage {
-		err := service.Sync()
-		out := CommandResponse{}
-		if err != nil {
-			out.Error = err.Error()
-		}
-		respond(w, http.StatusOK, out)
+	// Last check before the single send: nothing has touched the device yet.
+	if h.isStopping(r) {
+		fail(w, http.StatusServiceUnavailable, "request canceled; no command sent")
 		return
 	}
 	level := 0
 	if req.Level != nil {
 		level = *req.Level
 	}
-	h.mu.Lock()
-	stopping := h.stopping
-	h.mu.Unlock()
-	if stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
-		fail(http.StatusServiceUnavailable, "request canceled; no command sent")
-		return
+	result, err := h.service(session).Execute(req.Action, level)
+	out := CommandResponse{
+		Result:          result.Result,
+		DeliveryPending: result.DeliveryPending,
+		DeliveryMessage: result.DeliveryMessage,
 	}
-	result, err := service.Execute(req.Action, level)
-	out := CommandResponse{Result: result.Result, DeliveryPending: result.DeliveryPending, DeliveryMessage: result.DeliveryMessage}
 	if err != nil {
 		out.Error = err.Error()
 		_, out.OutcomeUnknown = errors.AsType[*control.UnknownOutcomeError](err)
 	}
 	respond(w, http.StatusOK, out)
+}
+
+// rejectBody answers requests that carry a body and reports whether to continue.
+func rejectBody(w http.ResponseWriter, r *http.Request) bool {
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
+	if err != nil || len(b) != 0 {
+		fail(w, http.StatusBadRequest, "body not allowed")
+		return false
+	}
+	return true
+}
+
+// parseCommand strictly decodes a command: no unknown fields, no trailing
+// data, no null level, and a level only for speed, within the driver's range.
+func (h *host) parseCommand(w http.ResponseWriter, r *http.Request) (CommandRequest, error) {
+	var req CommandRequest
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
+	if err != nil {
+		return req, errors.New("request too large")
+	}
+	if err := decode(bytes.NewReader(b), &req); err != nil {
+		return req, err
+	}
+	// Decoding into the struct cannot distinguish a missing level from null.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return req, err
+	}
+	if level, ok := fields["level"]; ok && (req.Action != control.ActionSpeed || string(level) == "null") {
+		return req, errors.New("level is allowed only for speed and must be an integer")
+	}
+	if err := req.validate(); err != nil {
+		return req, err
+	}
+	if req.Level != nil {
+		levels, err := device.SpeedLevels(h.driver)
+		if err != nil {
+			return req, err
+		}
+		if !levels.Contains(*req.Level) {
+			return req, fmt.Errorf("speed requires a level %s", levels)
+		}
+	}
+	return req, nil
+}
+
+// isStopping reports whether the host or this request has been cancelled.
+func (h *host) isStopping(r *http.Request) bool {
+	h.mu.Lock()
+	stopping := h.stopping
+	h.mu.Unlock()
+	return stopping || h.ctx.Err() != nil || r.Context().Err() != nil
+}
+
+// admit registers the request with shutdown bookkeeping so Run waits for it,
+// and returns the current session, which may be nil. The caller must release.
+func (h *host) admit(w http.ResponseWriter, r *http.Request) (*ble.Session, func(), bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
+		fail(w, http.StatusServiceUnavailable, "agent stopping")
+		return nil, nil, false
+	}
+	h.work.Add(1)
+	return h.active, h.work.Done, true
+}
+
+// admitCommand is admit for the single command slot: only one command runs at
+// a time and nothing is queued. A command also wakes an idle-suspended link,
+// except reset-state, which never needs the device.
+func (h *host) admitCommand(w http.ResponseWriter, r *http.Request, req CommandRequest) (*ble.Session, func(), bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopping || h.ctx.Err() != nil || r.Context().Err() != nil {
+		fail(w, http.StatusServiceUnavailable, "agent stopping")
+		return nil, nil, false
+	}
+	if h.busy {
+		fail(w, http.StatusConflict, "command already in progress; not queued")
+		return nil, nil, false
+	}
+	h.busy = true
+	if req.Action != control.ActionResetState && h.suspended {
+		h.suspended = false
+		select {
+		case h.wake <- struct{}{}:
+		default:
+		}
+	}
+	h.work.Add(1)
+	release := func() {
+		h.mu.Lock()
+		h.busy = false
+		h.mu.Unlock()
+		h.work.Done()
+	}
+	return h.active, release, true
 }
 
 // notSent marks failures where the request certainly never reached a command
