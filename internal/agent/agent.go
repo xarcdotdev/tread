@@ -43,6 +43,7 @@ type host struct {
 	work           sync.WaitGroup
 	store          *observed.Store
 	cfg            config.Config
+	driver         device.Driver
 }
 
 // Run retains host ownership through all admitted transactions and backend
@@ -83,7 +84,7 @@ func Run(ctx context.Context, cfg config.Config, opts Options) error {
 	}
 	defer cleanup()
 	idleTimeout, _ := cfg.Treadmill.IdleDisconnectDuration() // validated above; retained for runtime
-	h := &host{ctx: ctx, cfg: cfg, connectWait: opts.ConnectWait, idleTimeout: idleTimeout, wake: make(chan struct{}, 1), store: observed.NewStore(cfg.Device, device.CapabilitiesFor(driver), observed.StoreOptions{})}
+	h := &host{ctx: ctx, cfg: cfg, driver: driver, connectWait: opts.ConnectWait, idleTimeout: idleTimeout, wake: make(chan struct{}, 1), store: observed.NewStore(cfg.Device, device.CapabilitiesFor(driver), observed.StoreOptions{})}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	server := &http.Server{Handler: http.HandlerFunc(h.handle), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 4096}

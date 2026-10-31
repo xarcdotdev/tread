@@ -128,6 +128,18 @@ func TestNoInventedSpeedAndBounds(t *testing.T) {
 		t.Fatal("paused speed allowed")
 	}
 }
+func TestExplicitSpeedUsesDriverBounds(t *testing.T) {
+	c, packets := fixture(t)
+	for _, level := range []int{-1, 0, 9, 12} {
+		if _, err := c.Execute("speed", level); err == nil || !strings.Contains(err.Error(), "speed requires a level 1–8") {
+			t.Fatalf("level %d: %v", level, err)
+		}
+	}
+	if len(*packets) != 0 || len(events(t, c)) != 0 {
+		t.Fatal("invalid speeds sent or queued")
+	}
+}
+
 func TestInvalidationsPreservePending(t *testing.T) {
 	for _, change := range []string{"boot", "device", "driver", "mac", "reset", "inflight"} {
 		t.Run(change, func(t *testing.T) {

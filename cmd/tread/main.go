@@ -28,7 +28,7 @@ const usage = `usage: tread [-config path] [-direct] <command> [options]
   start | resume | pause | stop    Control the treadmill and report usage
   speed <level>                   Set a driver speed level and queue usage
   toggle                          Pause if running, otherwise start
-  speed-up | speed-down           Adjust running speed one level (down sets 1 if unknown)
+  speed-up | speed-down           Adjust running speed one level (down sets lowest if unknown)
   reset-state                     Forget local knowledge; preserve usage
   status                          Send a status query, not a command acknowledgment
   observed [-json]                Read the agent's live device snapshot

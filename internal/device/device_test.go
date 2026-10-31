@@ -26,6 +26,32 @@ func TestConservativeCapabilities(t *testing.T) {
 	}
 }
 
+type rangedDriver struct {
+	commandOnly
+	caps observed.Capabilities
+}
+
+func (d rangedDriver) Capabilities() observed.Capabilities { return d.caps }
+
+func TestSpeedLevelsRequireValidMetadata(t *testing.T) {
+	r := observed.LevelRange{Min: 2, Max: 6, Step: 2}
+	if got, err := SpeedLevels(rangedDriver{caps: observed.Capabilities{Actions: []string{"speed"}, SpeedLevels: &r}}); err != nil || got != r {
+		t.Fatalf("SpeedLevels = %v, %v", got, err)
+	}
+	for _, d := range []Driver{
+		nil,
+		commandOnly{},
+		rangedDriver{},
+		rangedDriver{caps: observed.Capabilities{SpeedLevels: &r}},
+		rangedDriver{caps: observed.Capabilities{Actions: []string{"speed"}, SpeedLevels: &observed.LevelRange{Min: 1, Max: 8}}},
+		rangedDriver{caps: observed.Capabilities{Actions: []string{"speed"}, SpeedLevels: &observed.LevelRange{Min: 0, Max: 8, Step: 1}}},
+	} {
+		if _, err := SpeedLevels(d); err == nil {
+			t.Errorf("speed levels without valid metadata: %#v", d)
+		}
+	}
+}
+
 // Test implementations exercise the transport-independent session contract.
 type optionalDriver struct{ commandOnly }
 

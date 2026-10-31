@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/xarcdotdev/oss-treadmill/internal/control"
+	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 	"github.com/xarcdotdev/oss-treadmill/internal/ownership"
 )
@@ -38,8 +39,9 @@ type CommandResponse struct {
 func (r CommandRequest) validate() error {
 	switch r.Action {
 	case "speed":
-		if r.Level == nil || *r.Level < 1 || *r.Level > 8 {
-			return errors.New("speed requires level 1–8")
+		// The host checks the level against its driver's range.
+		if r.Level == nil {
+			return errors.New("speed requires a level")
 		}
 		return nil
 	case "start", "resume", "pause", "stop", "status", "toggle", "speed-up", "speed-down", "reset-state":
@@ -109,6 +111,16 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 		if err = req.validate(); err != nil {
 			fail(http.StatusBadRequest, err.Error())
 			return
+		}
+		if req.Level != nil {
+			levels, err := device.SpeedLevels(h.driver)
+			if err == nil && !levels.Contains(*req.Level) {
+				err = fmt.Errorf("speed requires a level %s", levels)
+			}
+			if err != nil {
+				fail(http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 	} else {
 		b, err := io.ReadAll(body)

@@ -45,7 +45,7 @@
   --bad-soft: #ffeef0;
   --bad-line: #ffc9d1;
 
-  /* Ordinal violet ramp for speed levels 1–8 (validated: monotone, ΔL ≥ 0.06). */
+  /* Ordinal violet ramp; app.js spreads the driver's speed levels over its 8 steps (validated: monotone, ΔL ≥ 0.06). */
   --level-1: #b0a2ff;
   --level-2: #9e86ff;
   --level-3: #8d68ff;

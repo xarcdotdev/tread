@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +111,35 @@ func TestDriverMustBeRegistered(t *testing.T) {
 	cfg.Treadmill.Driver = "unknown"
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), `unknown treadmill driver "unknown"`) {
 		t.Fatalf("unknown driver: %v", err)
+	}
+}
+
+func TestLevelsFollowDriverRange(t *testing.T) {
+	levels, err := Default().Treadmill.SpeedLevels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := map[string]float64{}
+	for _, n := range levels.Levels() {
+		all[strconv.Itoa(n)] = float64(n)
+	}
+	above := strconv.Itoa(levels.Max + 1)
+	for _, tc := range []struct {
+		name  string
+		edit  func(*Treadmill)
+		valid bool
+	}{
+		{"top initial level", func(t *Treadmill) { t.InitialLevel = levels.Max }, true},
+		{"initial level above", func(t *Treadmill) { t.InitialLevel = levels.Max + 1 }, false},
+		{"speed above", func(t *Treadmill) { t.SpeedKMH = map[string]float64{above: 1} }, false},
+		{"calibrated", func(t *Treadmill) { t.Calibrated, t.SpeedKMH = true, all }, true},
+		{"calibrated partially", func(t *Treadmill) { t.Calibrated, t.SpeedKMH = true, map[string]float64{"1": 1} }, false},
+	} {
+		cfg := Default()
+		tc.edit(&cfg.Treadmill)
+		if err := cfg.Validate(); (err == nil) != tc.valid {
+			t.Errorf("%s: %v", tc.name, err)
+		}
 	}
 }
 

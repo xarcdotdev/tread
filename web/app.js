@@ -7,9 +7,22 @@ const number = (n, digits = 0) =>
   });
 const icon = (name) =>
   `<svg class="icon" aria-hidden="true"><use href="/icons.svg#${name}"/></svg>`;
-// Speed levels are ordinal, so each level keeps its own step of one ramp.
-const levelColor = (level) =>
-  `var(--level-${Math.min(8, Math.max(1, level))})`;
+// The driver's speed level range from /api/config.
+let speedLevels;
+// Speed levels are ordinal, so the driver's range spreads over one 8-step ramp.
+const levelColor = (level) => {
+  const { min = level, max = level } = speedLevels ?? {};
+  const t = max > min ? (level - min) / (max - min) : 0;
+  return `var(--level-${1 + Math.round(Math.min(1, Math.max(0, t)) * 7)})`;
+};
+// Every level in the driver's range, or none while it is unknown.
+function levelList() {
+  const levels = [];
+  if (speedLevels)
+    for (let n = speedLevels.min; n <= speedLevels.max; n += speedLevels.step)
+      levels.push(n);
+  return levels;
+}
 let configuration,
   report,
   period = new URLSearchParams(location.search).get("period") || "1d",
@@ -130,9 +143,9 @@ function settings(c, demo, age = null) {
   $("calibration-state").className = `chip ${state}`;
   $("calibration-state").innerHTML = `${icon(stateIcon)}${stateText}`;
   const max = Math.max(1, ...Object.values(t.speed_kmh));
-  $("calibration").innerHTML = Array.from({ length: 8 }, (_, i) => {
-    const v = t.speed_kmh[i + 1];
-    return `<tr><td><span class="level-tag"><i style="background:${levelColor(i + 1)}"></i>Level ${i + 1}</span></td><td>${v ? number(v, 2) + " km/h" : "Not measured"}</td><td>${v ? number(v / 3.6, 3) + " m/s" : "—"}</td><td><div class="calibration-bar"><i style="width:${v ? (v / max) * 100 : 0}%"></i></div></td></tr>`;
+  $("calibration").innerHTML = levelList().map((level) => {
+    const v = t.speed_kmh[level];
+    return `<tr><td><span class="level-tag"><i style="background:${levelColor(level)}"></i>Level ${level}</span></td><td>${v ? number(v, 2) + " km/h" : "Not measured"}</td><td>${v ? number(v / 3.6, 3) + " m/s" : "—"}</td><td><div class="calibration-bar"><i style="width:${v ? (v / max) * 100 : 0}%"></i></div></td></tr>`;
   }).join("");
   if (demo)
     notices([
@@ -348,8 +361,9 @@ async function loadGoalsPath() {
 }
 async function init() {
   try {
-    const { config: c, demo, age } = await get("/api/config");
+    const { config: c, demo, age, speed_levels } = await get("/api/config");
     configuration = c;
+    speedLevels = speed_levels;
     document
       .querySelectorAll("[data-device]")
       .forEach((el) => (el.textContent = c.treadmill.name));

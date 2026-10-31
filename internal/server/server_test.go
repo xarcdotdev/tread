@@ -61,12 +61,22 @@ func TestEventIngestionAndDashboard(t *testing.T) {
 			t.Errorf("%s: %d", path, w.Code)
 		}
 	}
-	for _, body := range []string{`[{"id":"bad","device":"desk","action":"speed","value":9,"ts":"` + start + `"}]`, `[{"id":"bad","device":"desk","action":"fly","ts":"` + start + `"}]`} {
+	// Ingestion requires positive speeds; driver bounds belong to control.
+	for _, body := range []string{
+		`[{"id":"bad","device":"desk","action":"speed","value":0,"ts":"` + start + `"}]`,
+		`[{"id":"bad","device":"desk","action":"speed","value":-1,"ts":"` + start + `"}]`,
+		`[{"id":"bad","device":"desk","action":"fly","ts":"` + start + `"}]`,
+	} {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, httptest.NewRequest("POST", "/api/events", strings.NewReader(body)))
 		if w.Code != 400 {
 			t.Fatalf("invalid event accepted: %d", w.Code)
 		}
+	}
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("POST", "/api/events", strings.NewReader(`[{"id":"twelve","device":"desk","action":"speed","value":12,"ts":"`+start+`"}]`)))
+	if w.Code != 204 {
+		t.Fatalf("positive level above 8 rejected: %d %s", w.Code, w.Body.String())
 	}
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/stats?period=garbage", nil))

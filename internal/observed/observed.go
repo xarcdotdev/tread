@@ -1,7 +1,10 @@
 // Package observed holds live device readings, never commanded or estimated values.
 package observed
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type ConnectionStatus string
 
@@ -82,6 +85,30 @@ type LevelRange struct {
 	Min  int `json:"min"`
 	Max  int `json:"max"`
 	Step int `json:"step"`
+}
+
+// Valid reports positive levels with a forward step.
+func (r LevelRange) Valid() bool { return r.Min >= 1 && r.Max >= r.Min && r.Step >= 1 }
+
+// Contains reports whether level is reachable from Min in whole steps.
+func (r LevelRange) Contains(level int) bool {
+	return r.Valid() && level >= r.Min && level <= r.Max && (level-r.Min)%r.Step == 0
+}
+
+// Levels lists every contained level in ascending order; none if invalid.
+func (r LevelRange) Levels() []int {
+	var out []int
+	for n := r.Min; r.Valid() && n <= r.Max; n += r.Step {
+		out = append(out, n)
+	}
+	return out
+}
+
+func (r LevelRange) String() string {
+	if r.Step == 1 {
+		return fmt.Sprintf("%d–%d", r.Min, r.Max)
+	}
+	return fmt.Sprintf("%d–%d in steps of %d", r.Min, r.Max, r.Step)
 }
 
 type Capabilities struct {

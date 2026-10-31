@@ -22,7 +22,7 @@ type Event struct {
 	ID     string    `json:"id"`
 	Device string    `json:"device"`
 	Action Action    `json:"action"`
-	Value  int       `json:"value,omitempty"` // speed level for Speed
+	Value  int       `json:"value,omitempty"` // positive speed level for Speed; driver bounds are checked by control
 	TS     time.Time `json:"ts"`
 }
 
@@ -49,8 +49,8 @@ func (e Event) Validate(now time.Time) error {
 			return fmt.Errorf("value is only allowed for speed")
 		}
 	case Speed:
-		if e.Value < 1 || e.Value > 8 {
-			return fmt.Errorf("speed must be 1–8")
+		if e.Value < 1 {
+			return fmt.Errorf("speed must be a positive level")
 		}
 	default:
 		return fmt.Errorf("unknown action %q", e.Action)

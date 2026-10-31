@@ -60,7 +60,12 @@ func configResponse(c config.Config, demo bool, now time.Time) map[string]any {
 	if years, ok := c.Personal.AgeAt(now.In(c.Location())); ok {
 		age = &years
 	}
-	return map[string]any{"config": c, "demo": demo, "read_only": true, "age": age}
+	// The web UI lists calibration rows and level colors over the driver's range.
+	var levels *observed.LevelRange
+	if r, err := c.Treadmill.SpeedLevels(); err == nil {
+		levels = &r
+	}
+	return map[string]any{"config": c, "demo": demo, "read_only": true, "age": age, "speed_levels": levels}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

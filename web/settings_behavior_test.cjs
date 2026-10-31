@@ -88,6 +88,7 @@ function configuration(demo = false) {
   return {
     demo,
     age: 36,
+    speed_levels: { min: 1, max: 2, step: 1 },
     config: {
       personal: { weight_kg: 75, height_cm: 180, birthdate: "1990-06-15", gender: "male" },
       treadmill: {

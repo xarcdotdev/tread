@@ -11,7 +11,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -86,7 +85,8 @@ func (c *Controller) load() (state, error) {
 			}
 		}
 	}
-	if err == nil && (s.Version != 1 || (s.Mode != "" && s.Mode != "running" && s.Mode != "paused" && s.Mode != "stopped") || s.Speed < 0 || s.Speed > 8) {
+	// Speed is checked against driver levels where relative commands use it.
+	if err == nil && (s.Version != 1 || (s.Mode != "" && s.Mode != "running" && s.Mode != "paused" && s.Mode != "stopped") || s.Speed < 0) {
 		err = errors.New("invalid version or knowledge")
 	}
 	if err != nil {
@@ -175,6 +175,14 @@ func (c *Controller) Execute(action string, level int) (Result, error) {
 		s.Mode, s.Speed = "", 0
 	}
 	s.Identity, s.Boot = id, boot
+	// Validate speed commands against the driver's published range.
+	var levels observed.LevelRange
+	if action == "speed" || action == "speed-up" || action == "speed-down" {
+		levels, err = device.SpeedLevels(driver)
+		if err != nil {
+			return Result{}, fmt.Errorf("speed unsupported: %w", err)
+		}
+	}
 	switch action {
 	case "toggle":
 		switch s.Mode {
@@ -194,15 +202,11 @@ func (c *Controller) Execute(action string, level int) (Result, error) {
 				return Result{}, errors.New("speed-up requires known speed; use speed-down or an explicit speed first")
 			}
 			// Unknown speed only ever slows down, to the lowest level.
-			r, err := speedLevels(driver)
-			if err != nil {
-				return Result{}, err
-			}
-			level, action = r.Min, "speed"
+			level, action = levels.Min, "speed"
 			break
 		}
 		var bounded bool
-		level, bounded, err = relativeLevel(driver, s.Speed, action)
+		level, bounded, err = relativeLevel(levels, s.Speed, action)
 		if err != nil {
 			return Result{}, err
 		}
@@ -210,6 +214,9 @@ func (c *Controller) Execute(action string, level int) (Result, error) {
 			return Result{Message: fmt.Sprintf("Speed already at level %d; no command sent.", s.Speed)}, nil
 		}
 		action = "speed"
+	}
+	if action == "speed" && !levels.Contains(level) {
+		return Result{}, fmt.Errorf("speed requires a level %s", levels)
 	}
 	packet, err := driver.Packet(action, level)
 	if err != nil {
@@ -268,24 +275,9 @@ func (c *Controller) Execute(action string, level int) (Result, error) {
 	return Result{Message: fmt.Sprintf("%s sent; usage queued", action), Motion: true}, nil
 }
 
-// speedLevels uses optional command metadata, never telemetry or calibration.
-// The journal and usage events retain their legacy level 1-8 contract.
-func speedLevels(driver device.Driver) (*observed.LevelRange, error) {
-	caps := device.CapabilitiesFor(driver)
-	r := caps.SpeedLevels
-	if !slices.Contains(caps.Actions, "speed") || r == nil || r.Min < 1 || r.Max < r.Min || r.Step < 1 {
-		return nil, errors.New("relative speed adjustment unsupported; use an explicit speed level")
-	}
-	return r, nil
-}
-
-// relativeLevel steps one level within speedLevels; bounded means no change.
-func relativeLevel(driver device.Driver, speed int, action string) (level int, bounded bool, err error) {
-	r, err := speedLevels(driver)
-	if err != nil {
-		return 0, false, err
-	}
-	if speed < r.Min || speed > r.Max || (speed-r.Min)%r.Step != 0 {
+// relativeLevel steps one level within the driver's range; bounded means no change.
+func relativeLevel(r observed.LevelRange, speed int, action string) (level int, bounded bool, err error) {
+	if !r.Contains(speed) {
 		return 0, false, errors.New("known speed is outside driver level metadata; use an explicit speed level")
 	}
 	if action == "speed-up" {

@@ -36,7 +36,7 @@ Open <http://127.0.0.1:18743>. Demo mode uses generated history in an in-memory 
 | ----------------- | ------------------ | ----------------------------------------- | ------------ | ------------------------------------------------------- |
 | Sportstech DFT200 | `dft200`           | start, pause, resume, stop, speed, status | 1–8          | Experimental: speed, distance ([Telemetry](#telemetry)) |
 
-Devices connect over Bluetooth LE through BlueZ. Speed levels other than 1–8 aren't supported yet.
+Devices connect over Bluetooth LE through BlueZ. Speed levels come from the driver, and each speed usage event records the range it was sent with.
 
 ## Setup
 
@@ -82,7 +82,7 @@ Commands go through the agent and are sent at most once. "No command sent" is sa
 
 ```sh
 tread start | resume | pause | stop
-tread speed <1-8>          # speed level, not km/h
+tread speed <level>        # driver speed level (DFT200: 1–8), not km/h
 tread toggle               # pause if running, otherwise start
 tread speed-up | speed-down
 tread status

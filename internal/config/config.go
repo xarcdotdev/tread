@@ -14,7 +14,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/xarcdotdev/oss-treadmill/internal/device"
 	"github.com/xarcdotdev/oss-treadmill/internal/drivers"
+	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 )
 
 type Personal struct {
@@ -118,6 +120,15 @@ func LoadFile(path string) (Config, error) {
 
 func (c Config) Validate() error { return c.validate(time.Now()) }
 
+// SpeedLevels is the configured driver's command level range.
+func (t Treadmill) SpeedLevels() (observed.LevelRange, error) {
+	driver, err := drivers.Lookup(t.Driver)
+	if err != nil {
+		return observed.LevelRange{}, err
+	}
+	return device.SpeedLevels(driver)
+}
+
 // IdleDisconnectDuration also supplies the default for programmatically built configs.
 func (t Treadmill) IdleDisconnectDuration() (time.Duration, error) {
 	value := t.IdleDisconnectTimeout
@@ -139,23 +150,28 @@ func (c Config) validate(now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("timezone: %w", err)
 	}
-	if _, err := drivers.Lookup(c.Treadmill.Driver); err != nil {
+	driver, err := drivers.Lookup(c.Treadmill.Driver)
+	if err != nil {
 		return err
+	}
+	levels, err := device.SpeedLevels(driver)
+	if err != nil {
+		return fmt.Errorf("treadmill.driver %q: %w", c.Treadmill.Driver, err)
 	}
 	if c.Device == "" {
 		return errors.New("device must be a stable treadmill identifier")
 	}
-	if c.Treadmill.InitialLevel < 1 || c.Treadmill.InitialLevel > 8 {
-		return errors.New("initial_level must be 1–8")
+	if !levels.Contains(c.Treadmill.InitialLevel) {
+		return fmt.Errorf("initial_level must be a level %s", levels)
 	}
 	for k, v := range c.Treadmill.SpeedKMH {
 		n, e := strconv.Atoi(k)
-		if e != nil || n < 1 || n > 8 || v <= 0 || v > 20 || math.IsNaN(v) || math.IsInf(v, 0) {
+		if e != nil || !levels.Contains(n) || v <= 0 || v > 20 || math.IsNaN(v) || math.IsInf(v, 0) {
 			return fmt.Errorf("invalid speed_kmh entry %q", k)
 		}
 	}
-	if c.Treadmill.Calibrated && len(c.Treadmill.SpeedKMH) != 8 {
-		return errors.New("calibrated requires speed_kmh entries for all 8 levels")
+	if n := len(levels.Levels()); c.Treadmill.Calibrated && len(c.Treadmill.SpeedKMH) != n {
+		return fmt.Errorf("calibrated requires speed_kmh entries for all %d levels", n)
 	}
 	p := c.Personal
 	if p.Birthdate != "" {

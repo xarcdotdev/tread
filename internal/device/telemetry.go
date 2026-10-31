@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 )
@@ -19,6 +20,16 @@ func CapabilitiesFor(driver Driver) observed.Capabilities {
 		return provider.Capabilities().Clone()
 	}
 	return observed.Capabilities{}.Clone()
+}
+
+// SpeedLevels returns the driver's published command levels, never telemetry or
+// calibration. Drivers without the speed action or a valid range have none.
+func SpeedLevels(driver Driver) (observed.LevelRange, error) {
+	caps := CapabilitiesFor(driver)
+	if !slices.Contains(caps.Actions, "speed") || caps.SpeedLevels == nil || !caps.SpeedLevels.Valid() {
+		return observed.LevelRange{}, errors.New("driver publishes no speed levels")
+	}
+	return *caps.SpeedLevels, nil
 }
 
 // ErrTelemetryDisabled means the optional telemetry protocol was not enabled.

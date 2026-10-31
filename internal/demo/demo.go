@@ -8,6 +8,7 @@ import (
 
 	"github.com/xarcdotdev/oss-treadmill/internal/config"
 	"github.com/xarcdotdev/oss-treadmill/internal/event"
+	"github.com/xarcdotdev/oss-treadmill/internal/observed"
 )
 
 func Config() config.Config {
@@ -15,10 +16,19 @@ func Config() config.Config {
 	c.Personal = config.Personal{WeightKG: 75, Birthdate: "1994-01-01", HeightCM: 178, Gender: "male", StepLengthM: 0.74}
 	c.Treadmill.Calibrated = true
 	c.Path = "Demo settings (in memory)"
-	for n := 1; n <= 8; n++ {
+	for _, n := range speedLevels().Levels() {
 		c.Treadmill.SpeedKMH[fmt.Sprint(n)] = float64(n) * 0.65
 	}
 	return c
+}
+
+// speedLevels is the demo driver's range; the default driver always has one.
+func speedLevels() observed.LevelRange {
+	levels, err := config.Default().Treadmill.SpeedLevels()
+	if err != nil {
+		panic(err)
+	}
+	return levels
 }
 
 func Events(now time.Time, loc *time.Location) []event.Event {
