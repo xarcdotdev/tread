@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<p align="center">A small Go CLI for an underdesk treadmill, with a SQLite usage log and a dashboard. Currently supporting DFT200.</p>
+<p align="center">A small Go CLI and dashboard for under-desk treadmills, with a SQLite usage log. Supports the Sportstech DFT200.</p>
 
 <p align="center">
   <a href="#setup">Setup</a> · <a href="#commands">Commands</a> · <a href="#configuration">Configuration</a>
@@ -59,21 +59,22 @@ Requires Go (see `go.mod`), Linux and BlueZ.
 ### Install
 
 ```sh
-go build -o tread ./cmd/tread
-mkdir -p ~/.local/bin ~/.config/tread
-ln -s "$(pwd)/tread" ~/.local/bin/tread
+go install ./cmd/tread                   # installs to $(go env GOBIN) or ~/go/bin
+mkdir -p ~/.config/tread
 cp config.example.toml ~/.config/tread/config.toml
 ```
 
+Or build in place with `go build -o tread ./cmd/tread` and symlink the binary into your `PATH`.
+
 ### Configuration
 
-| Setting                                      | Override                         | Default                                                         |
-| -------------------------------------------- | -------------------------------- | --------------------------------------------------------------- |
-| Config file                                  | `-config <path>`, `TREAD_CONFIG` | `~/.config/tread/config.toml`                                   |
-| `treadmill.mac`                              |                                  | Required. Find it with `bluetoothctl`: `scan on`, `devices`     |
-| `[personal]`, `[treadmill.speed_kmh]`        |                                  | Unset; see [Statistics & calibration](#statistics--calibration) |
-| `db_path` (SQLite database)                  | `TREAD_DB_PATH`                  | `tread.db` beside the config file                               |
-| State directory (usage queue, control state) | `TREAD_STATE_DIR`                | `~/.local/state/tread`                                          |
+| Setting                                      | Override                         | Default                                                     |
+| -------------------------------------------- | -------------------------------- | ----------------------------------------------------------- |
+| Config file                                  | `-config <path>`, `TREAD_CONFIG` | `~/.config/tread/config.toml`                               |
+| `treadmill.mac`                              |                                  | Required. Find it with `bluetoothctl`: `scan on`, `devices` |
+| `[personal]`, `[treadmill.speed_kmh]`        |                                  | Unset; see [Calibration](#calibration)                      |
+| `db_path` (SQLite database)                  | `TREAD_DB_PATH`                  | `tread.db` beside the config file                           |
+| State directory (usage queue, control state) | `TREAD_STATE_DIR`                | `~/.local/state/tread`                                      |
 
 Keep the state directory persistent; it can hold usage not yet delivered. `tread config` prints the effective configuration.
 
@@ -113,20 +114,24 @@ Commands go through the agent and are sent at most once. `tread -direct <command
 | "No command sent"                       | Nothing reached the treadmill. Safe to repeat.                                  |
 | "Command outcome unknown; do not retry" | The command may have reached the belt. Check the treadmill before sending more. |
 
-## Statistics & calibration
+## Calibration
 
-Measure each speed level and fill `[treadmill.speed_kmh]`, then set `calibrated = true`:
+Speed levels are ordinal, so distance needs the real belt speed of each level. Measure every level you use, fill `[treadmill.speed_kmh]`, then set `calibrated = true`:
 
 ```text
 km/h = belt length (m) × revolutions ÷ seconds × 3.6
 ```
 
-- Walking time excludes pauses (expire after 270 s); a stretch without commands is capped at two hours.
-- Distance integrates calibrated speed; steps use `step_length_m` (fallback: height × 0.414).
-- Calories use [Compendium MET values](https://pacompendium.com/walking/) and, given full personal data, [Mifflin-St Jeor](https://pubmed.ncbi.nlm.nih.gov/2305711/). They are estimates.
-- History is recalculated from the current config. Missing data shows as a dash.
+## How estimates work
 
-Config is reloaded per request; restart the server after changing `db_path` or `listen`.
+| Metric       | Source                                                                                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Walking time | Commands sent, excluding pauses. A pause longer than 270 s ends the session; a stretch without commands is capped at two hours.                       |
+| Distance     | Walking time × calibrated speed per level                                                                                                             |
+| Steps        | Distance ÷ `step_length_m` (fallback: height × 0.414)                                                                                                 |
+| Calories     | [Compendium MET values](https://pacompendium.com/walking/) and, given full personal data, [Mifflin-St Jeor](https://pubmed.ncbi.nlm.nih.gov/2305711/) |
+
+All of these are estimates. History is recalculated from the current config on every request, so a calibration change applies to past sessions too. Missing data shows as a dash. Restart the server after changing `db_path` or `listen`.
 
 ## Goals
 
@@ -154,7 +159,7 @@ All entries are optional. Periods are calendar-based (Monday-start weeks) in the
 
 ## Advanced usage
 
-### Local state
+### Control state and when to reset
 
 tread tracks mode and speed from the commands it sends, not from telemetry. `speed-up`/`speed-down` only work once running mode and speed are known: start the belt, then use `speed <n>` or `speed-down` to establish speed.
 
