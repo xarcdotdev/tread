@@ -220,13 +220,26 @@ func (h *host) connections(ctx context.Context, driver device.Driver, opts Optio
 	}
 }
 
+// connection runs one link until it faults, idles out, or the agent stops.
+//
+// Lifecycle: the session becomes h.active once ready (immediately without
+// telemetry, otherwise after the first capability or reading update). The wait
+// loop then watches for cancellation, protocol exit, session fault and idle
+// expiry. On any exit the session is detached from h.active and closed, and a
+// still-running telemetry goroutine is awaited before returning.
+//
+// closing and ready are guarded by h.mu, including inside telemetry callbacks
+// that may arrive during cleanup.
 func (h *host) connection(ctx context.Context, session *ble.Session, telemetry device.TelemetrySession, generation uint64) error {
 	protocolCtx, cancel := context.WithCancel(ctx)
 	finished := make(chan error, 1)
 	var idle idleReadings
-	closing := false  // guarded by h.mu, including callbacks during cleanup
+	closing := false
 	ready := func() { // caller holds h.mu
-		if !closing && !h.stopping && protocolCtx.Err() == nil && session.Err() == nil && h.store.SetConnection(generation, observed.ConnectionConnected) {
+		if closing || h.stopping || protocolCtx.Err() != nil || session.Err() != nil {
+			return
+		}
+		if h.store.SetConnection(generation, observed.ConnectionConnected) {
 			h.active = session
 		}
 	}

@@ -25,10 +25,12 @@ func (i *idleReadings) update(now time.Time, u observed.Update) {
 		i.since = time.Time{}
 	}
 	if u.State != nil {
-		i.stateAt, i.paused = now, u.State.Value == observed.StatePaused
+		i.stateAt = now
+		i.paused = u.State.Value == observed.StatePaused
 	}
 	if speed, ok := u.Measurements[observed.FieldSpeed]; ok {
-		i.speedAt, i.zero = now, speed.Value != nil && *speed.Value == 0
+		i.speedAt = now
+		i.zero = speed.Value != nil && *speed.Value == 0
 	}
 	if !i.freshStopped(now) {
 		i.since = time.Time{}

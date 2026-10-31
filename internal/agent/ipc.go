@@ -382,12 +382,13 @@ func (c *Client) request(ctx context.Context, method, path string, body []byte, 
 
 // Execute treats every ambiguous transport or response error as outcome unknown.
 // Do not retry a command after such an error; inspect/reset knowledge explicitly.
-func (c *Client) Execute(ctx context.Context, req CommandRequest) (out CommandResponse, err error) {
-	if err = req.validate(); err != nil {
+func (c *Client) Execute(ctx context.Context, req CommandRequest) (CommandResponse, error) {
+	var out CommandResponse
+	if err := req.validate(); err != nil {
 		return out, err
 	}
 	body, _ := json.Marshal(req)
-	err = c.request(ctx, "POST", "/v1/command", body, &out)
+	err := c.request(ctx, "POST", "/v1/command", body, &out)
 	if err == nil && out.Error == "" && out.Result.Message == "" {
 		err = errors.New("command response lacks a result message")
 	}
@@ -404,14 +405,15 @@ func (c *Client) Execute(ctx context.Context, req CommandRequest) (out CommandRe
 		return out, errors.New(out.Error)
 	}
 	if out.Error != "" {
-		err = errors.New(out.Error)
+		return out, errors.New(out.Error)
 	}
-	return
+	return out, nil
 }
 
-func (c *Client) Snapshot(ctx context.Context) (out observed.Snapshot, err error) {
-	err = c.request(ctx, "GET", "/v1/observed", nil, &out)
-	return
+func (c *Client) Snapshot(ctx context.Context) (observed.Snapshot, error) {
+	var out observed.Snapshot
+	err := c.request(ctx, "GET", "/v1/observed", nil, &out)
+	return out, err
 }
 
 func (c *Client) Sync(ctx context.Context) error {
