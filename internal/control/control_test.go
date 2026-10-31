@@ -32,7 +32,7 @@ func fixture(t *testing.T) (*Controller, *[][]byte) {
 	}
 	return c, packets
 }
-func execute(t *testing.T, c *Controller, a string, n int) string {
+func execute(t *testing.T, c *Controller, a Action, n int) string {
 	t.Helper()
 	r, err := c.Execute(a, n)
 	if err != nil {
@@ -66,11 +66,11 @@ func TestKnowledgeAndPackets(t *testing.T) {
 		t.Fatal("speed invented mode")
 	}
 	// Unknown mode toggles to start.
-	for _, a := range []string{"toggle", "speed-up", "toggle", "toggle", "stop", "toggle", "resume"} {
+	for _, a := range []Action{"toggle", "speed-up", "toggle", "toggle", "stop", "toggle", "resume"} {
 		execute(t, c, a, 0)
 	}
 	wants := []struct {
-		a string
+		a Action
 		n int
 	}{{"speed", 3}, {"start", 0}, {"speed", 4}, {"pause", 0}, {"start", 0}, {"stop", 0}, {"start", 0}, {"resume", 0}}
 	es := events(t, c)
@@ -78,15 +78,15 @@ func TestKnowledgeAndPackets(t *testing.T) {
 		t.Fatalf("counts %d %d", len(es), len(*packets))
 	}
 	for i, w := range wants {
-		p, _ := (dft200.Driver{}).Packet(w.a, w.n)
+		p, _ := (dft200.Driver{}).Packet(string(w.a), w.n)
 		if !bytes.Equal((*packets)[i], p) {
 			t.Fatalf("packet %d", i)
 		}
-		a := w.a
-		if a == "resume" {
-			a = "start"
+		a := event.Action(w.a)
+		if w.a == ActionResume {
+			a = event.Start
 		}
-		if string(es[i].Action) != a || es[i].Value != w.n {
+		if es[i].Action != a || es[i].Value != w.n {
 			t.Fatalf("event %d: %+v", i, es[i])
 		}
 	}
@@ -108,7 +108,7 @@ func TestNoInventedSpeedAndBounds(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		level  int
-		action string
+		action Action
 	}{{1, "speed-down"}, {8, "speed-up"}} {
 		execute(t, c, "speed", tc.level)
 		count := len(*p)

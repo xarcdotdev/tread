@@ -21,9 +21,9 @@ import (
 	"github.com/xarcdotdev/oss-treadmill/internal/ownership"
 )
 
-func commandRequest(action string, args []string) (agent.CommandRequest, error) {
+func commandRequest(action control.Action, args []string) (agent.CommandRequest, error) {
 	req := agent.CommandRequest{Action: action}
-	if action == "speed" {
+	if action == control.ActionSpeed {
 		if len(args) != 1 {
 			return req, errors.New("usage: tread [-direct] speed <level>")
 		}

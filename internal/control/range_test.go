@@ -10,7 +10,7 @@ func TestRelativeLevelStepsWithinDriverRange(t *testing.T) {
 	r := observed.LevelRange{Min: 2, Max: 6, Step: 2}
 	for _, tc := range []struct {
 		speed   int
-		action  string
+		action  Action
 		level   int
 		bounded bool
 		bad     bool

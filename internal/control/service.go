@@ -26,28 +26,36 @@ func WithLock(cfg config.Config, fn func() error) error {
 	return fn()
 }
 
+// Service runs controller operations under the journal lock and delivers
+// queued usage afterwards, outside that lock.
 type Service struct{ Controller *Controller }
+
+// ServiceResult reports the command outcome and, separately, whether its usage
+// event is still waiting for delivery. Pending delivery is not a motor failure.
 type ServiceResult struct {
 	Result          Result `json:"result"`
 	DeliveryPending bool   `json:"delivery_pending"`
 	DeliveryMessage string `json:"delivery_message,omitempty"`
 }
 
-func (s *Service) Execute(action string, level int) (out ServiceResult, err error) {
+func (s *Service) Execute(action Action, level int) (ServiceResult, error) {
 	c := s.Controller
+	var result Result
 	var batch []event.Event
-	var deliveryErr error
-	err = WithLock(c.Config, func() error {
-		var e error
-		out.Result, e = c.Execute(action, level)
-		if e == nil && out.Result.Motion {
-			batch, deliveryErr = c.Queue.Snapshot()
+	var snapshotErr error
+	err := WithLock(c.Config, func() error {
+		var err error
+		result, err = c.Execute(action, level)
+		if err == nil && result.Motion {
+			batch, snapshotErr = c.Queue.Snapshot()
 		}
-		return e
+		return err
 	})
-	if err != nil || !out.Result.Motion {
-		return
+	out := ServiceResult{Result: result}
+	if err != nil || !result.Motion {
+		return out, err
 	}
+	deliveryErr := snapshotErr
 	if deliveryErr == nil {
 		deliveryErr = s.deliver(batch)
 	}
@@ -55,7 +63,7 @@ func (s *Service) Execute(action string, level int) (out ServiceResult, err erro
 		out.DeliveryPending = true
 		out.DeliveryMessage = deliveryErr.Error()
 	}
-	return
+	return out, nil
 }
 
 func (s *Service) Sync() error {

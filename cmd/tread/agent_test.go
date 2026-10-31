@@ -111,7 +111,7 @@ func TestAgentCommandRoutesOnceWithoutLocalConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := <-requests
-			if calls.Load() != 1 || req.Action != action {
+			if calls.Load() != 1 || req.Action != control.Action(action) {
 				t.Fatalf("calls=%d request=%+v", calls.Load(), req)
 			}
 			if action == "speed" {

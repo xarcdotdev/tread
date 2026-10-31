@@ -85,7 +85,7 @@ func runWithSetupHost(args []string, setup func([]string) error) error {
 	case "setup-host":
 		return setup(args)
 	case "start", "resume", "pause", "stop", "status", "speed", "toggle", "speed-up", "speed-down", "reset-state":
-		req, err := commandRequest(cmd, args)
+		req, err := commandRequest(control.Action(cmd), args)
 		if err != nil {
 			return err
 		}
@@ -102,7 +102,7 @@ func runWithSetupHost(args []string, setup func([]string) error) error {
 			if req.Level != nil {
 				level = *req.Level
 			}
-			return controlWith(newController(cfg), cmd, level)
+			return controlWith(newController(cfg), req.Action, level)
 		})
 	case "observed":
 		if *direct {
@@ -168,7 +168,7 @@ func newController(cfg config.Config) *control.Controller {
 	return &control.Controller{Config: cfg, Queue: event.NewClient(cfg.ServerURL, cfg.QueuePath()), Send: ble.Send}
 }
 
-func controlWith(c *control.Controller, action string, level int) error {
+func controlWith(c *control.Controller, action control.Action, level int) error {
 	out, err := (&control.Service{Controller: c}).Execute(action, level)
 	if err != nil {
 		return err

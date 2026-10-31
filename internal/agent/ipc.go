@@ -24,8 +24,8 @@ import (
 const maxBody = 16384
 
 type CommandRequest struct {
-	Action string `json:"action"`
-	Level  *int   `json:"level,omitempty"`
+	Action control.Action `json:"action"`
+	Level  *int           `json:"level,omitempty"`
 }
 
 type CommandResponse struct {
@@ -37,16 +37,15 @@ type CommandResponse struct {
 }
 
 func (r CommandRequest) validate() error {
-	switch r.Action {
-	case "speed":
+	if !r.Action.Valid() {
+		return errors.New("unknown action")
+	}
+	if r.Action == control.ActionSpeed {
 		// The host checks the level against its driver's range.
 		if r.Level == nil {
 			return errors.New("speed requires a level")
 		}
 		return nil
-	case "start", "resume", "pause", "stop", "status", "toggle", "speed-up", "speed-down", "reset-state":
-	default:
-		return errors.New("unknown action")
 	}
 	if r.Level != nil {
 		return errors.New("level is allowed only for speed")
@@ -104,7 +103,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 			fail(http.StatusBadRequest, err.Error())
 			return
 		}
-		if level, ok := fields["level"]; ok && (req.Action != "speed" || string(level) == "null") {
+		if level, ok := fields["level"]; ok && (req.Action != control.ActionSpeed || string(level) == "null") {
 			fail(http.StatusBadRequest, "level is allowed only for speed and must be an integer")
 			return
 		}
@@ -143,7 +142,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 	session := h.active
 	if command {
 		h.busy = true
-		if req.Action != "reset-state" && h.suspended {
+		if req.Action != control.ActionResetState && h.suspended {
 			h.suspended = false
 			select {
 			case h.wake <- struct{}{}:
@@ -161,7 +160,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 		h.mu.Unlock()
 		h.work.Done()
 	}()
-	if command && session == nil && req.Action != "reset-state" {
+	if command && session == nil && req.Action != control.ActionResetState {
 		if session = h.waitActive(r.Context()); session == nil {
 			fail(http.StatusServiceUnavailable, "device unavailable; no command sent")
 			return
@@ -196,7 +195,7 @@ func (h *host) handle(w http.ResponseWriter, r *http.Request) {
 	out := CommandResponse{Result: result.Result, DeliveryPending: result.DeliveryPending, DeliveryMessage: result.DeliveryMessage}
 	if err != nil {
 		out.Error = err.Error()
-		out.OutcomeUnknown = strings.Contains(out.Error, "unknown") || strings.Contains(out.Error, "command sent;")
+		_, out.OutcomeUnknown = errors.AsType[*control.UnknownOutcomeError](err)
 	}
 	respond(w, http.StatusOK, out)
 }
