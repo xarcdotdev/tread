@@ -126,163 +126,235 @@ func resting(p config.Personal, now time.Time) float64 {
 	return p.WeightKG
 }
 
-func Build(events []event.Event, now, from time.Time, period string, cfg config.Config) Report {
-	r := Report{Period: period, From: from, To: now, Days: []Bucket{}, Sessions: []Session{}, Pace: []Pace{}, Warnings: []string{}, DistanceAvailable: true}
-	opt := DefaultOptions()
-	opt.InitialLevel = cfg.Treadmill.InitialLevel
-	opt.KmhPerLevel = func(level int) float64 { return cfg.Treadmill.SpeedKMH[strconv.Itoa(level)] }
-	// Controllers of the same treadmill must share an identifier. Other devices
-	// have separate state so their start/stop events cannot alter this treadmill.
+// estimates are the profile-derived factors applied to every walking interval.
+// A zero factor disables the corresponding metric.
+type estimates struct {
+	stepLength float64 // metres per step
+	rest       float64 // resting kcal per hour
+}
+
+func newEstimates(p config.Personal, now time.Time) estimates {
+	e := estimates{stepLength: p.StepLengthM, rest: resting(p, now)}
+	if e.stepLength == 0 && p.HeightCM > 0 {
+		e.stepLength = p.HeightCM / 100 * 0.414
+	}
+	return e
+}
+
+// buckets groups walking by local calendar day, or by elapsed hour from `from`
+// for the rolling 1d period.
+type buckets struct {
+	hourly bool
+	from   time.Time
+	loc    *time.Location
+}
+
+// slot returns the key of the bucket containing t and the first instant after it.
+func (b buckets) slot(t time.Time) (key string, end time.Time) {
+	if b.hourly {
+		// Elapsed-hour intervals anchored at from, not civil hours:
+		// DST gaps and overlaps still produce exactly 24 buckets.
+		start := b.from.Add(t.Sub(b.from).Truncate(time.Hour))
+		return start.UTC().Format(time.RFC3339Nano), start.Add(time.Hour)
+	}
+	local := t.In(b.loc)
+	return local.Format(time.DateOnly), CalendarBoundary(local.Year(), local.Month(), local.Day()+1, b.loc)
+}
+
+// keys lists every bucket from start through now, including empty ones so gaps
+// are visible in the activity graph. start is ignored for hourly buckets.
+func (b buckets) keys(start, now time.Time) []string {
+	var keys []string
+	if b.hourly {
+		for d := b.from; d.Before(now); d = d.Add(time.Hour) {
+			keys = append(keys, d.UTC().Format(time.RFC3339Nano))
+		}
+		return keys
+	}
+	n := start.In(b.loc)
+	for d := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC); ; d = d.AddDate(0, 0, 1) {
+		boundary := CalendarBoundary(d.Year(), d.Month(), d.Day(), b.loc)
+		if boundary.After(now) {
+			return keys
+		}
+		key := d.Format(time.DateOnly)
+		if boundary.Format(time.DateOnly) != key {
+			continue // A wholly skipped local date has no bucket.
+		}
+		keys = append(keys, key)
+	}
+}
+
+// tally accumulates clipped walking intervals into buckets and pace rows.
+type tally struct {
+	est          estimates
+	days         map[string]*Bucket
+	pace         map[int]*Pace
+	steps        float64
+	uncalibrated bool // some walked level has no speed calibration
+}
+
+func newTally(est estimates) *tally {
+	return &tally{est: est, days: map[string]*Bucket{}, pace: map[int]*Pace{}}
+}
+
+// add accounts hours walked within one span to bucket key and returns the
+// distance covered.
+func (t *tally) add(key string, span Span, hours float64) float64 {
+	km := hours * span.KMH
+	bucket := t.days[key]
+	if bucket == nil {
+		bucket = &Bucket{Date: key}
+		t.days[key] = bucket
+	}
+	bucket.Hours += hours
+	bucket.DistanceKM += km
+	if span.KMH <= 0 {
+		t.uncalibrated = true
+	} else {
+		bucket.Calories += met(span.KMH) * t.est.rest * hours
+	}
+	if t.est.stepLength > 0 {
+		steps := km * 1000 / t.est.stepLength
+		t.steps += steps
+		bucket.Steps = int64(math.Round(float64(bucket.Steps) + steps))
+	}
+	pace := t.pace[span.Level]
+	if pace == nil {
+		pace = &Pace{Level: span.Level, KMH: span.KMH}
+		t.pace[span.Level] = pace
+	}
+	pace.Hours += hours
+	return km
+}
+
+// clip restricts s to [from, now], tallies each walking interval into its
+// bucket, and returns the clipped session if any walking remains.
+func (t *tally) clip(s Session, from, now time.Time, b buckets) (Session, bool) {
+	if !s.End.After(from) {
+		return Session{}, false
+	}
+	clipped := Session{Start: s.Start, End: s.End, Device: s.Device}
+	if clipped.Start.Before(from) {
+		clipped.Start = from
+	}
+	for _, span := range s.Spans {
+		at, until := span.Start, span.End
+		if at.Before(from) {
+			at = from
+		}
+		if until.After(now) {
+			until = now
+		}
+		for at.Before(until) {
+			key, boundary := b.slot(at)
+			end := until
+			if boundary.Before(end) {
+				end = boundary
+			}
+			clipped.Distance += t.add(key, span, end.Sub(at).Hours())
+			clipped.Walking += end.Sub(at)
+			at = end
+		}
+	}
+	return clipped, clipped.Walking > 0
+}
+
+// bucket returns the accumulated bucket for key, or an empty one.
+func (t *tally) bucket(key string) Bucket {
+	if b := t.days[key]; b != nil {
+		return *b
+	}
+	return Bucket{Date: key}
+}
+
+// earliest returns the first instant of the earliest walked day, or now.
+func (t *tally) earliest(now time.Time, loc *time.Location) time.Time {
+	start := now
+	for key := range t.days {
+		civil, _ := time.Parse(time.DateOnly, key)
+		if day := CalendarBoundary(civil.Year(), civil.Month(), civil.Day(), loc); day.Before(start) {
+			start = day
+		}
+	}
+	return start
+}
+
+func groupByDevice(events []event.Event) map[string][]event.Event {
 	groups := map[string][]event.Event{}
 	for _, e := range events {
 		groups[e.Device] = append(groups[e.Device], e)
 	}
-	dayMap := map[string]*Bucket{}
-	paceMap := map[int]*Pace{}
-	stepLength := cfg.Personal.StepLengthM
-	if stepLength == 0 && cfg.Personal.HeightCM > 0 {
-		stepLength = cfg.Personal.HeightCM / 100 * 0.414
-	}
+	return groups
+}
+
+func Build(events []event.Event, now, from time.Time, period string, cfg config.Config) Report {
+	r := Report{Period: period, From: from, To: now, Days: []Bucket{}, Sessions: []Session{}, Pace: []Pace{}, Warnings: []string{}}
+	loc := cfg.Location()
+	opt := DefaultOptions()
+	opt.InitialLevel = cfg.Treadmill.InitialLevel
+	opt.KmhPerLevel = func(level int) float64 { return cfg.Treadmill.SpeedKMH[strconv.Itoa(level)] }
 	// Use the report date's age for the entire history, like the current profile
 	// and calibration. Do not age the profile separately for each walking day.
-	rest := resting(cfg.Personal, now.In(cfg.Location()))
-	var steps float64
-	for _, es := range groups {
+	est := newEstimates(cfg.Personal, now.In(loc))
+	t := newTally(est)
+	b := buckets{hourly: period == "1d", from: from, loc: loc}
+	// Controllers of the same treadmill must share an identifier. Other devices
+	// have separate state so their start/stop events cannot alter this treadmill.
+	for _, es := range groupByDevice(events) {
 		for _, s := range Sessions(es, now, opt) {
-			clipped := Session{Start: s.Start, End: s.End, Device: s.Device}
-			if clipped.Start.Before(from) {
-				clipped.Start = from
-			}
-			if !s.End.After(from) {
-				continue
-			}
-			for _, span := range s.Spans {
-				a, b := span.Start, span.End
-				if a.Before(from) {
-					a = from
-				}
-				if b.After(now) {
-					b = now
-				}
-				for a.Before(b) {
-					local := a.In(cfg.Location())
-					boundary := CalendarBoundary(local.Year(), local.Month(), local.Day()+1, cfg.Location())
-					date := local.Format(time.DateOnly)
-					if period == "1d" {
-						// Elapsed-hour intervals anchored at from, not civil hours:
-						// DST gaps and overlaps still produce exactly 24 buckets.
-						start := from.Add(a.Sub(from).Truncate(time.Hour))
-						boundary = start.Add(time.Hour)
-						date = start.UTC().Format(time.RFC3339Nano)
-					}
-					end := b
-					if boundary.Before(end) {
-						end = boundary
-					}
-					h := end.Sub(a).Hours()
-					km := h * span.KMH
-					bucket := dayMap[date]
-					if bucket == nil {
-						bucket = &Bucket{Date: date}
-						dayMap[date] = bucket
-					}
-					bucket.Hours += h
-					bucket.DistanceKM += km
-					if span.KMH <= 0 {
-						r.DistanceAvailable = false
-					} else {
-						bucket.Calories += met(span.KMH) * rest * h
-					}
-					if stepLength > 0 {
-						steps += km * 1000 / stepLength
-						bucket.Steps = int64(math.Round(float64(bucket.Steps) + km*1000/stepLength))
-					}
-					pace := paceMap[span.Level]
-					if pace == nil {
-						pace = &Pace{Level: span.Level, KMH: span.KMH}
-						paceMap[span.Level] = pace
-					}
-					pace.Hours += h
-					clipped.Walking += end.Sub(a)
-					clipped.Distance += km
-					a = end
-				}
-			}
-			if clipped.Walking > 0 {
+			if clipped, ok := t.clip(s, from, now, b); ok {
 				r.Sessions = append(r.Sessions, clipped)
 			}
 		}
 	}
-	appendBucket := func(key string) {
-		bucket := dayMap[key]
-		if bucket == nil {
-			bucket = &Bucket{Date: key}
-		}
+	start := from
+	if period == "all" {
+		start = t.earliest(now, loc)
+	}
+	for _, key := range b.keys(start, now) {
+		bucket := t.bucket(key)
 		if bucket.Hours > 0 {
 			bucket.AverageSpeed = bucket.DistanceKM / bucket.Hours
 		}
-		r.Days = append(r.Days, *bucket)
+		r.Days = append(r.Days, bucket)
 		r.Totals.Hours += bucket.Hours
 		r.Totals.DistanceKM += bucket.DistanceKM
 		r.Totals.Calories += bucket.Calories
 	}
-	if period == "1d" {
-		for d := from; d.Before(now); d = d.Add(time.Hour) {
-			appendBucket(d.UTC().Format(time.RFC3339Nano))
-		}
-	} else {
-		// Include zero days so gaps are visible in the activity graph.
-		start := from
-		if period == "all" {
-			start = now
-			for _, d := range dayMap {
-				civil, _ := time.Parse(time.DateOnly, d.Date)
-				t := CalendarBoundary(civil.Year(), civil.Month(), civil.Day(), cfg.Location())
-				if t.Before(start) {
-					start = t
-				}
-			}
-		}
-		n := start.In(cfg.Location())
-		start = time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
-		for d := start; ; d = d.AddDate(0, 0, 1) {
-			boundary := CalendarBoundary(d.Year(), d.Month(), d.Day(), cfg.Location())
-			if boundary.After(now) {
-				break
-			}
-			key := d.Format(time.DateOnly)
-			if boundary.Format(time.DateOnly) != key {
-				continue // A wholly skipped local date has no bucket.
-			}
-			appendBucket(key)
-		}
-	}
 	if r.Totals.Hours > 0 {
 		r.Totals.AverageSpeed = r.Totals.DistanceKM / r.Totals.Hours
 	}
-	r.Totals.Steps = int64(math.Round(steps))
-	for _, p := range paceMap {
+	r.Totals.Steps = int64(math.Round(t.steps))
+	for _, p := range t.pace {
 		r.Pace = append(r.Pace, *p)
 	}
 	sort.Slice(r.Pace, func(i, j int) bool { return r.Pace[i].Level < r.Pace[j].Level })
 	sort.Slice(r.Sessions, func(i, j int) bool { return r.Sessions[i].Start.After(r.Sessions[j].Start) })
-	r.StepsAvailable = r.DistanceAvailable && stepLength > 0
-	r.CaloriesAvailable = r.DistanceAvailable && rest > 0
-	if !cfg.Treadmill.Calibrated {
-		r.Warnings = append(r.Warnings, "Speed calibration is unconfirmed. Measure belt speeds, fill treadmill.speed_kmh and set calibrated = true.")
-	}
-	if !r.DistanceAvailable {
-		r.Warnings = append(r.Warnings, "Some used levels have no speed calibration. Distance, average speed, steps and calories are incomplete.")
-	}
-	if stepLength == 0 {
-		r.Warnings = append(r.Warnings, "Set personal.step_length_m or height_cm to estimate steps.")
-	} else if cfg.Personal.StepLengthM == 0 {
-		r.Warnings = append(r.Warnings, "Steps use an approximate step length of 41.4% of height. Set step_length_m for a better estimate.")
-	}
-	if rest == 0 {
-		r.Warnings = append(r.Warnings, "Set personal.weight_kg to estimate calories.")
-	}
+	r.DistanceAvailable = !t.uncalibrated
+	r.StepsAvailable = r.DistanceAvailable && est.stepLength > 0
+	r.CaloriesAvailable = r.DistanceAvailable && est.rest > 0
+	r.Warnings = warnings(cfg, r.DistanceAvailable, est)
 	return r
+}
+
+func warnings(cfg config.Config, distanceAvailable bool, est estimates) []string {
+	w := []string{}
+	if !cfg.Treadmill.Calibrated {
+		w = append(w, "Speed calibration is unconfirmed. Measure belt speeds, fill treadmill.speed_kmh and set calibrated = true.")
+	}
+	if !distanceAvailable {
+		w = append(w, "Some used levels have no speed calibration. Distance, average speed, steps and calories are incomplete.")
+	}
+	if est.stepLength == 0 {
+		w = append(w, "Set personal.step_length_m or height_cm to estimate steps.")
+	} else if cfg.Personal.StepLengthM == 0 {
+		w = append(w, "Steps use an approximate step length of 41.4% of height. Set step_length_m for a better estimate.")
+	}
+	if est.rest == 0 {
+		w = append(w, "Set personal.weight_kg to estimate calories.")
+	}
+	return w
 }
 
 func subtractMonths(day time.Time, months int) time.Time {
