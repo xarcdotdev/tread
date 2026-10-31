@@ -38,8 +38,11 @@ func commandRequest(action control.Action, args []string) (agent.CommandRequest,
 	return req, nil
 }
 
+// agentClient talks to the agent in the shared runtime directory.
+func agentClient() *agent.Client { return agent.NewClient(ownership.RuntimeDir()) }
+
 func agentControl(req agent.CommandRequest) error {
-	out, err := agent.NewClient(ownership.RuntimeDir()).Execute(context.Background(), req)
+	out, err := agentClient().Execute(context.Background(), req)
 	if err != nil {
 		// Delivery warnings do not turn into a second motor command.
 		if out.DeliveryPending {
@@ -56,11 +59,11 @@ func agentControl(req agent.CommandRequest) error {
 
 // agentSnapshot lets serve show live readings without owning Bluetooth.
 func agentSnapshot(ctx context.Context) (observed.Snapshot, error) {
-	return agent.NewClient(ownership.RuntimeDir()).Snapshot(ctx)
+	return agentClient().Snapshot(ctx)
 }
 
 func agentSync() error {
-	return agent.NewClient(ownership.RuntimeDir()).Sync(context.Background())
+	return agentClient().Sync(context.Background())
 }
 
 func reportControl(out control.ServiceResult) {
@@ -105,7 +108,7 @@ func showObserved(args []string) error {
 	if fs.NArg() != 0 {
 		return errors.New("usage: tread observed [-json]")
 	}
-	snapshot, err := agent.NewClient(ownership.RuntimeDir()).Snapshot(context.Background())
+	snapshot, err := agentClient().Snapshot(context.Background())
 	if err != nil {
 		return err
 	}

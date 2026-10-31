@@ -88,12 +88,20 @@ func Default() Config {
 	}
 }
 
-func Load() (Config, error) {
-	path := os.Getenv("TREAD_CONFIG")
+// Load reads the config at path. An empty path means TREAD_CONFIG, else the
+// default location under Dir(). A missing file yields defaults.
+func Load(path string) (Config, error) {
+	if path == "" {
+		path = os.Getenv("TREAD_CONFIG")
+	}
 	if path == "" {
 		path = filepath.Join(Dir(), "config.toml")
 	}
-	return LoadFile(path)
+	cfg, err := LoadFile(path)
+	if err != nil {
+		return cfg, fmt.Errorf("config: %w", err)
+	}
+	return cfg, nil
 }
 
 func LoadFile(path string) (Config, error) {

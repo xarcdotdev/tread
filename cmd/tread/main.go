@@ -78,32 +78,16 @@ func runWithSetupHost(args []string, setup func([]string) error) error {
 		return nil
 	}
 	cmd, args := args[0], args[1:]
+	if action := control.Action(cmd); action.Valid() {
+		return runControl(action, args, *path, *direct)
+	}
+	// Commands that talk to the agent never read the local configuration.
 	switch cmd {
 	case "help":
 		fmt.Println(usage)
 		return nil
 	case "setup-host":
 		return setup(args)
-	case "start", "resume", "pause", "stop", "status", "speed", "toggle", "speed-up", "speed-down", "reset-state":
-		req, err := commandRequest(control.Action(cmd), args)
-		if err != nil {
-			return err
-		}
-		if !*direct {
-			return agentControl(req)
-		}
-		// Own the host before loading configuration or touching local journals.
-		return withOwnership(func() error {
-			cfg, err := loadConfig(*path)
-			if err != nil {
-				return err
-			}
-			level := 0
-			if req.Level != nil {
-				level = *req.Level
-			}
-			return controlWith(newController(cfg), req.Action, level)
-		})
 	case "observed":
 		if *direct {
 			return errors.New("observed requires the agent; omit -direct")
@@ -116,17 +100,18 @@ func runWithSetupHost(args []string, setup func([]string) error) error {
 		if !*direct {
 			return agentSync()
 		}
-	case "agent":
+	case "agent", "config":
 		if len(args) != 0 {
-			return errors.New("usage: tread agent")
+			return fmt.Errorf("usage: tread %s", cmd)
 		}
-		fallthrough
+	case "serve", "stats":
 	default:
-		if *direct {
-			return errors.New("-direct is only supported for control commands and sync")
-		}
+		return fmt.Errorf("unknown command %q; use tread help", cmd)
 	}
-	cfg, err := loadConfig(*path)
+	if *direct && cmd != "sync" {
+		return errors.New("-direct is only supported for control commands and sync")
+	}
+	cfg, err := config.Load(*path)
 	if err != nil {
 		return err
 	}
@@ -138,30 +123,34 @@ func runWithSetupHost(args []string, setup func([]string) error) error {
 	case "stats":
 		return showStats(cfg, args)
 	case "config":
-		if len(args) > 0 {
-			return errors.New("usage: tread config")
-		}
 		return json.NewEncoder(os.Stdout).Encode(cfg)
-	case "sync":
-		// Explicit direct sync is queue/network only, with no Bluetooth owner.
+	default: // explicit direct sync: queue and network only, no Bluetooth owner
 		return syncUsage(newController(cfg))
-	default:
-		return fmt.Errorf("unknown command %q; use tread help", cmd)
 	}
 }
 
-func loadConfig(path string) (config.Config, error) {
-	var cfg config.Config
-	var err error
-	if path != "" {
-		cfg, err = config.LoadFile(path)
-	} else {
-		cfg, err = config.Load()
-	}
+// runControl sends one command through the agent, or with -direct through a
+// short-lived Bluetooth connection owned by this process.
+func runControl(action control.Action, args []string, path string, direct bool) error {
+	req, err := commandRequest(action, args)
 	if err != nil {
-		return cfg, fmt.Errorf("config: %w", err)
+		return err
 	}
-	return cfg, nil
+	if !direct {
+		return agentControl(req)
+	}
+	// Own the host before loading configuration or touching local journals.
+	return withOwnership(func() error {
+		cfg, err := config.Load(path)
+		if err != nil {
+			return err
+		}
+		level := 0
+		if req.Level != nil {
+			level = *req.Level
+		}
+		return controlWith(newController(cfg), action, level)
+	})
 }
 
 func newController(cfg config.Config) *control.Controller {
