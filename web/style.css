@@ -14,30 +14,41 @@
   background: var(--bg);
   color-scheme: light;
 
-  --bg: #f4f5fa;
+  --bg: #f4f6f7;
   --surface: #fff;
-  --surface-2: #f8f9fc;
-  --ink: #12142a;
-  --ink-2: #4b5068;
-  --muted: #8b90a7;
-  --line: #e7e9f2;
-  --line-2: #f0f1f7;
-  --grid: #eceef5;
+  --surface-2: #f7f9fa;
+  --ink: #111318;
+  --ink-2: #4a515a;
+  --muted: #868d97;
+  --line: #e5e8ec;
+  --line-2: #eff1f4;
+  --grid: #eceff2;
 
-  /* Brand accent: step 4 of the pace ramp below. */
-  --accent: #7e43fe;
-  --accent-strong: #6d24e9;
-  --accent-soft: #f2ecff;
+  /* Brand: the logo's mint, carried by a sidebar in the logo's near-black. */
+  --brand: #54f4d0;
+  --sidebar-bg: #0f1012;
+  --sidebar-card: #17181b;
+  --sidebar-raised: #212226;
+  --sidebar-line: #26272b;
+  --sidebar-ink: #f1f1ef;
+  --sidebar-ink-2: rgb(241 241 239 / 0.62);
+  --sidebar-muted: rgb(241 241 239 / 0.4);
+
+  /* Accent: steps 3, 4 and 6 of the pace ramp below. Fills take dark text, like the logo; --accent-strong is for text on light surfaces (≥ 4.5:1 on white). */
+  --accent: #00c6a5;
+  --accent-hover: #00ae91;
+  --accent-strong: #00806a;
+  --accent-soft: #dcfaf2;
 
   /* Vibrant highlight tones for metric tiles. */
-  --violet: #7e43fe;
+  --teal: #00c6a5;
   --orange: #ff6a1f;
-  --cyan: #00a8e8;
+  --blue: #2f6fef;
   --pink: #ff2d78;
 
-  /* Status: icon + label always accompany these. */
-  --good: #0fa968;
-  --good-soft: #e6f8ef;
+  /* Status: icon + label always accompany these. Green sits well away from the teal accent. */
+  --good: #168f3a;
+  --good-soft: #e6f6ea;
   --warn: #b97800;
   --warn-soft: #fff6e0;
   --warn-line: #fbe2a6;
@@ -45,20 +56,20 @@
   --bad-soft: #ffeef0;
   --bad-line: #ffc9d1;
 
-  /* Ordinal violet ramp; app.js spreads the driver's speed levels over its 8 steps (validated: monotone, ΔL ≥ 0.06). */
-  --level-1: #b0a2ff;
-  --level-2: #9e86ff;
-  --level-3: #8d68ff;
-  --level-4: #7e43fe;
-  --level-5: #6d24e9;
-  --level-6: #5c00cd;
-  --level-7: #4902a5;
-  --level-8: #36017f;
+  /* Ordinal ramp from the logo mint to deep teal (OKLCH hue 175); app.js spreads the driver's speed levels over its 8 steps (validated: monotone, ΔL ≥ 0.06). */
+  --level-1: #54f4d0;
+  --level-2: #34ddba;
+  --level-3: #00c6a5;
+  --level-4: #00ae91;
+  --level-5: #00977d;
+  --level-6: #00806a;
+  --level-7: #006a57;
+  --level-8: #005445;
 
   --radius: 18px;
   --shadow:
-    0 1px 2px rgb(18 20 42 / 0.04),
-    0 6px 24px -8px rgb(18 20 42 / 0.08);
+    0 1px 2px rgb(17 19 24 / 0.04),
+    0 6px 24px -8px rgb(17 19 24 / 0.08);
   --sidebar: 248px;
 }
 * {
@@ -86,7 +97,7 @@ button {
   cursor: pointer;
 }
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-strong);
   outline-offset: 3px;
   border-radius: 8px;
 }
@@ -123,35 +134,22 @@ code {
   display: flex;
   flex-direction: column;
   gap: 32px;
-  padding: 28px 18px 20px;
-  background: var(--surface);
-  border-right: 1px solid var(--line);
+  padding: 30px 18px 20px;
+  color: var(--sidebar-ink);
+  background: var(--sidebar-bg);
+}
+.sidebar :focus-visible {
+  outline-color: var(--brand);
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 0 8px;
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: -0.6px;
+  display: block;
+  width: fit-content;
+  padding: 0 10px;
 }
-.brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(135deg, #9a6bff, var(--accent-strong));
-  box-shadow: 0 6px 16px -6px rgb(126 67 254 / 0.7);
-}
-.brand-mark .icon {
-  width: 20px;
-  height: 20px;
-}
-.brand b {
-  color: var(--accent);
+.brand img {
+  display: block;
+  height: 26px;
+  width: auto;
 }
 .nav {
   display: flex;
@@ -163,7 +161,7 @@ code {
   font-weight: 600;
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--sidebar-muted);
   padding: 0 12px 8px;
 }
 .nav a {
@@ -172,27 +170,27 @@ code {
   gap: 12px;
   padding: 11px 12px;
   border-radius: 11px;
-  color: var(--ink-2);
+  color: var(--sidebar-ink-2);
   font-weight: 500;
   transition:
     background 0.15s,
     color 0.15s;
 }
 .nav a .icon {
-  color: var(--muted);
+  color: var(--sidebar-muted);
   transition: color 0.15s;
 }
 .nav a:hover {
-  background: var(--surface-2);
-  color: var(--ink);
+  background: var(--sidebar-card);
+  color: var(--sidebar-ink);
 }
 .nav a.active {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
+  background: rgb(84 244 208 / 0.12);
+  color: var(--brand);
   font-weight: 600;
 }
 .nav a.active .icon {
-  color: var(--accent);
+  color: var(--brand);
 }
 .device-card {
   margin-top: auto;
@@ -201,8 +199,8 @@ code {
   gap: 11px;
   padding: 14px;
   border-radius: 14px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
+  background: var(--sidebar-card);
+  border: 1px solid var(--sidebar-line);
 }
 .device-icon {
   position: relative;
@@ -211,9 +209,9 @@ code {
   border-radius: 10px;
   display: grid;
   place-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--accent);
+  background: var(--sidebar-raised);
+  border: 1px solid var(--sidebar-line);
+  color: var(--brand);
 }
 .device-icon::after {
   content: "";
@@ -224,7 +222,7 @@ code {
   height: 9px;
   border-radius: 50%;
   background: var(--good);
-  border: 2px solid var(--surface-2);
+  border: 2px solid var(--sidebar-card);
 }
 /* Link status from /api/live; green until the first poll answers. */
 .device-card[data-link="connecting"] .device-icon::after {
@@ -235,7 +233,7 @@ code {
 }
 .device-card:is([data-link="off"], [data-link="disconnected"], [data-link="disabled"])
   .device-icon::after {
-  background: var(--muted);
+  background: var(--sidebar-muted);
 }
 .device-text {
   display: flex;
@@ -245,9 +243,10 @@ code {
 }
 .device-text span {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--sidebar-muted);
 }
 .device-text strong {
+  color: var(--sidebar-ink);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -344,14 +343,14 @@ p {
   border: 0;
   border-radius: 11px;
   background: var(--accent);
-  color: #fff;
+  color: var(--ink);
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 6px 16px -8px rgb(126 67 254 / 0.8);
+  box-shadow: 0 6px 16px -8px rgb(0 198 165 / 0.8);
   transition: background 0.15s;
 }
 .btn:hover {
-  background: var(--accent-strong);
+  background: var(--accent-hover);
 }
 .btn .icon {
   width: 16px;
@@ -418,6 +417,7 @@ body.loading #refresh .icon {
 }
 .segmented.small button[aria-pressed="true"] {
   background: var(--accent);
+  color: var(--ink);
 }
 
 /* Cards */
@@ -453,7 +453,7 @@ body.loading #refresh .icon {
   display: grid;
   place-items: center;
   flex: none;
-  color: #fff;
+  color: var(--tone-ink, #fff);
   background: var(--tone, var(--accent));
   box-shadow: 0 8px 18px -10px var(--tone, var(--accent));
 }
@@ -461,14 +461,16 @@ body.loading #refresh .icon {
   width: 20px;
   height: 20px;
 }
-.tone-violet {
-  --tone: var(--violet);
+/* Brand tile: dark glyph on mint, like the logo. */
+.tone-teal {
+  --tone: var(--teal);
+  --tone-ink: var(--ink);
 }
 .tone-orange {
   --tone: var(--orange);
 }
-.tone-cyan {
-  --tone: var(--cyan);
+.tone-blue {
+  --tone: var(--blue);
 }
 .tone-pink {
   --tone: var(--pink);
@@ -495,7 +497,7 @@ body.loading #refresh .icon {
 }
 body.loading .metric-value span,
 body.loading .stat strong {
-  color: #c4c7d6;
+  color: #c5c9ce;
 }
 
 .chart-grid {
@@ -656,7 +658,7 @@ h2 {
 }
 .tooltip span {
   display: block;
-  color: #b9bccd;
+  color: #b4b8bf;
   font-size: 11px;
 }
 .tooltip strong {
@@ -792,7 +794,7 @@ tbody tr:last-child td {
   display: grid;
   place-items: center;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 .when-icon .icon {
   width: 16px;
@@ -969,7 +971,7 @@ td.strong {
   width: 16px;
   height: 16px;
   margin-top: 3px;
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 .calibration-bar {
   height: 8px;
@@ -1032,8 +1034,7 @@ td.strong {
     align-items: center;
     gap: 20px;
     padding: 12px 20px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--sidebar-line);
   }
   .nav {
     flex-direction: row;
@@ -1053,7 +1054,7 @@ td.strong {
     border: 0;
   }
   .device-icon::after {
-    border-color: var(--surface);
+    border-color: var(--sidebar-bg);
   }
   main {
     padding: 28px 24px;
@@ -1071,11 +1072,11 @@ td.strong {
     padding: 10px 16px;
     gap: 12px;
   }
-  .brand span:last-child {
-    display: none;
-  }
   .brand {
     padding: 0;
+  }
+  .brand img {
+    height: 22px;
   }
   .nav a {
     padding: 9px;

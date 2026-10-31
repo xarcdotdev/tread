@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <meta name="theme-color" content="#7e43fe" />
+    <meta name="theme-color" content="#0f1012" />
     <title>Overview · tread</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/style.css" />
@@ -11,12 +11,9 @@
   <body class="loading">
     <div class="shell">
       <aside class="sidebar">
-        <a class="brand" href="/"
-          ><span class="brand-mark"
-            ><svg class="icon" aria-hidden="true">
-              <use href="/icons.svg#activity" /></svg></span
-          ><span>tread<b>.</b></span></a
-        >
+        <a class="brand" href="/" aria-label="tread overview"
+          ><img src="/logo.svg" alt="tread" width="133" height="26"
+        /></a>
         <nav class="nav" aria-label="Main">
           <div class="nav-label">Menu</div>
           <a class="active" aria-current="page" aria-label="Overview" href="/"
@@ -79,7 +76,7 @@
         <div id="notices" aria-live="polite"></div>
         <section class="card live" id="live" hidden aria-label="Live readings">
           <div class="panel-title">
-            <span class="metric-icon tone-cyan"
+            <span class="metric-icon tone-blue"
               ><svg class="icon" aria-hidden="true">
                 <use href="/icons.svg#activity" /></svg
             ></span>
@@ -91,7 +88,7 @@
           <div class="live-stats" id="live-stats"></div>
         </section>
         <section class="cards" aria-label="Usage totals">
-          <article class="card metric tone-violet">
+          <article class="card metric tone-teal">
             <div class="metric-head">
               <span class="metric-icon"
                 ><svg class="icon" aria-hidden="true">
@@ -119,7 +116,7 @@
               Estimated from distance &amp; step length
             </div>
           </article>
-          <article class="card metric tone-cyan">
+          <article class="card metric tone-blue">
             <div class="metric-head">
               <span class="metric-icon"
                 ><svg class="icon" aria-hidden="true">
@@ -148,7 +145,7 @@
           <section class="card panel chart-panel">
             <div class="panel-head">
               <div class="panel-title">
-                <span class="metric-icon tone-violet"
+                <span class="metric-icon tone-teal"
                   ><svg class="icon" aria-hidden="true">
                     <use href="/icons.svg#trending-up" /></svg
                 ></span>
@@ -191,7 +188,7 @@
           <section class="card panel donut-panel">
             <div class="panel-head">
               <div class="panel-title">
-                <span class="metric-icon tone-cyan"
+                <span class="metric-icon tone-blue"
                   ><svg class="icon" aria-hidden="true">
                     <use href="/icons.svg#zap" /></svg
                 ></span>

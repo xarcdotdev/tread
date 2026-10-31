@@ -14,8 +14,8 @@ Set FontSize 18
 Set Width 1000
 Set Height 520
 Set Padding 28
-# Dashboard ink as background, its violet accent and status colors
-Set Theme { "name": "tread", "background": "#12142a", "foreground": "#f4f5fa", "cursor": "#f4f5fa", "selection": "#2e3150", "black": "#12142a", "red": "#e5374f", "green": "#0fa968", "yellow": "#ffb020", "blue": "#00a8e8", "magenta": "#9e86ff", "cyan": "#00a8e8", "white": "#f4f5fa", "brightBlack": "#8b90a7", "brightRed": "#ff2d78", "brightGreen": "#0fa968", "brightYellow": "#ffb020", "brightBlue": "#00a8e8", "brightMagenta": "#b0a2ff", "brightCyan": "#00a8e8", "brightWhite": "#ffffff" }
+# Logo near-black as background, its mint accent and the dashboard status colors
+Set Theme { "name": "tread", "background": "#0f1012", "foreground": "#f1f1ef", "cursor": "#f1f1ef", "selection": "#26272b", "black": "#0f1012", "red": "#e5374f", "green": "#22b14c", "yellow": "#ffb020", "blue": "#5b8dff", "magenta": "#54f4d0", "cyan": "#00c6a5", "white": "#f1f1ef", "brightBlack": "#868d97", "brightRed": "#ff2d78", "brightGreen": "#22b14c", "brightYellow": "#ffb020", "brightBlue": "#5b8dff", "brightMagenta": "#34ddba", "brightCyan": "#00c6a5", "brightWhite": "#ffffff" }
 Set TypingSpeed 60ms
 Set WaitTimeout 3m
 
